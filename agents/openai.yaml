@@ -1,0 +1,3 @@
+interface:
+  display_name: "软件操作录屏审阅"
+  short_description: "全帧索引、分层审阅与字幕对齐，还原可复现操作并保留证据与未解决疑点"

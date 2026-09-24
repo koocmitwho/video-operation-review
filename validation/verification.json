@@ -1,0 +1,37 @@
+{
+  "checked_at_utc": "2026-09-24T14:44:22.539004+00:00",
+  "schema_version": 3,
+  "default_mode": "layered",
+  "tests": {
+    "passed": 61,
+    "failed": 0,
+    "seconds": 130.914,
+    "strict_and_original": 31,
+    "layered": 21,
+    "language": 9
+  },
+  "environment": {
+    "os": "Windows",
+    "python": "3.10.11",
+    "numpy": "2.2.6",
+    "pillow": "12.0.0",
+    "sqlite": "3.40.1",
+    "ffmpeg": "8.1.2"
+  },
+  "format_validation": "passed",
+  "real_user_video_validation": "not_run",
+  "semantic_completeness_proven": false,
+  "synthetic_visual_trial": {
+    "source_frames": 32,
+    "strict_displayed_source_frames": 32,
+    "layered_displayed_source_frames": 18,
+    "visible_checkpoints": [
+      9,
+      9
+    ],
+    "final_parameter_errors": 0,
+    "strict_blind_test": false,
+    "full_review_gate_passed": false
+  },
+  "evidence_boundary": "Unit tests are reproducible from repository fixtures; raw host conversations and visual-call logs remain local. No fixed token/time saving is claimed."
+}
