@@ -19,21 +19,6 @@ For example, if a video shows someone entering `0.20`, cancelling, then entering
 - **Subtitles and existing transcripts.** Accept SRT, VTT, embedded text subtitles, and transcript JSON with an explicit time base. Preserve the original text, optional translations, sources, offsets, and overlap warnings.
 - **Persistent review progress.** Store indexes, evidence, viewing records, steps, and open questions in SQLite. Resume after a pause and reuse existing results.
 
-## Workflow
-
-```mermaid
-flowchart LR
-    A[Full-frame index and change cues] --> B[Coarse review of all segments]
-    B --> C[Detailed review of operation units]
-    C --> D[Gap checks and sample review]
-    D -->|Anomaly found| C
-    D --> E[Export steps, evidence, and unfinished ranges]
-```
-
-The default mode is `layered`. For exhaustive review, explicitly select `coverage` and use the `strict` audit. Migrated review databases retain their previous strict mode and historical records.
-
-Segment proposals are based on image changes and timeline features. The AI assistant must actually view the images to determine what each interval means and identify the operation steps.
-
 ## Requirements
 
 - Python 3.10 or later.
