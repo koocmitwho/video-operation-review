@@ -41,6 +41,8 @@ Segment proposals are based on image changes and timeline features. The AI assis
 - Accessible FFmpeg and ffprobe executables. FFmpeg must support `-fps_mode passthrough`.
 - The host assistant used for semantic review must be able to read files, run local commands, and actually view images.
 
+**Text-only models are incompatible with this skill.** Both the model and the current host must support actual image input.
+
 Validated on Windows with Python 3.10.11 and Python 3.12.10, using FFmpeg 8.1.2.
 
 If you need to install the Python dependencies, use your own virtual environment:
@@ -51,13 +53,62 @@ python -m pip install -r requirements.txt
 
 ## Getting started
 
+### Install in Codex and DeepSeek Harness
+
+Both hosts use the same skill and review records. By default, place the complete repository under `.agents/skills/video-operation-review` in your user directory.
+
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/koocmitwho/video-operation-review.git "$env:USERPROFILE\.agents\skills\video-operation-review"
+```
+
+macOS / Linux shell:
+
+```bash
+git clone https://github.com/koocmitwho/video-operation-review.git "$HOME/.agents/skills/video-operation-review"
+```
+
+If the target directory already exists, check its version and local changes first. Alternatively, download the ZIP and place the complete directory there; make sure `SKILL.md` is directly inside `video-operation-review`.
+
+For use in one project only, place it at `<project-root>/.agents/skills/video-operation-review/`. If DeepSeek Harness uses a custom `DSH_AGENTS_HOME`, follow that configuration. For DSH-only use, `<DSH_HOME>/skills/video-operation-review/` is another option.
+
+| Host | Invocation | Image requirements |
+|---|---|---|
+| Codex | Explicitly use `$video-operation-review`, or let task matching select it | A working image-viewing tool in the current environment, such as `view_image` |
+| DeepSeek Harness | Request `video-operation-review`, loaded through the existing skill tool | `read_image`, an attachment service, and a current model that supports image input |
+
+DeepSeek Harness must have local skill discovery and loading enabled. This repository is used as a filesystem skill. See [host adaptation](references/hosts.md) for directory and tool differences and troubleshooting; directory rules follow the [Codex documentation](https://learn.chatgpt.com/docs/build-skills) and [DeepSeek Harness documentation](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/skill/skill-filesystem).
+
+### Check the environment first
+
+Run from the repository root:
+
+```text
+python scripts/review_video.py doctor
+```
+
+The diagnostic checks the current Python, NumPy, Pillow, FFmpeg, and ffprobe, returning JSON. Exit code 0 means local processing dependencies passed; 1 means something is missing or unsuitable. It does not install software or create a review database. Diagnosis and `--help` remain available without NumPy or Pillow.
+
+If the desktop host did not inherit your terminal's PATH, provide executable paths with `--ffmpeg` / `--ffprobe`, or set `VOR_FFMPEG` / `VOR_FFPROBE` in the same process environment. Explicit command arguments take precedence. When using a virtual environment, use the same Python interpreter to install dependencies, diagnose the environment, and run the scripts.
+
+**Passing dependency checks does not establish model vision capability.** Mark text-only models as incompatible and stop the review. For image-capable models, describe the specific blocker, such as a missing tool or inaccessible file.
+
+### New and older model compatibility
+
+This update uses the GPT-6 family in Codex and DeepSeek-V4.1-Flash (`deepseek-flash`) in DeepSeek Harness as the basis for new-model optimizations: organize evidence around related operations, reduce repetitive descriptions, and inspect local crops when image resizing affects readability. The model references are the [OpenAI model catalog](https://developers.openai.com/api/docs/models) and [DeepSeek changelog](https://api-docs.deepseek.com/updates/).
+
+Older models that retain image input and the necessary tool capabilities are also supported: reduce the operation scope of each batch when context is smaller, save progress between batches, and resume from those records. Use sequential execution when asynchronous or subagent tools are unavailable.
+
+See [model adaptation](references/models.en.md) for model strategies, image clarity, and capability checks. Compatibility rules and actual validation results are recorded separately.
+
 ### Ask an AI assistant to review a recording
 
 After downloading or cloning this repository, you can ask an assistant with access to the directory:
 
 > Follow the video-operation-review workflow in this directory's `SKILL.md` to review this software tutorial. Check for existing results first, then perform complete indexing, a coarse review of the full timeline, and detailed review of key operations. Deliver reproducible steps, key evidence, and unresolved questions. Report computational coverage, review coverage, and the number of source frames actually viewed separately.
 
-The skill entry point is [SKILL.md](SKILL.md). The workflow can be used directly from the repository, without this project automatically changing the host's global configuration.
+The skill entry point is [SKILL.md](SKILL.md). If it is not installed in a discovery directory, ask the assistant to read that file directly. When the host runs from another working directory, use the script's absolute path and specify the input video and `--work` locations explicitly.
 
 ### Prepare evidence from the command line
 
@@ -97,7 +148,7 @@ python scripts/review_video.py audit --work ./work/tutorial --summary
 python scripts/review_video.py export --work ./work/tutorial
 ```
 
-Use `validate --require-coverage` to check the complete-review requirements for the current mode. Partial results can be exported when information is insufficient, with the gaps preserved.
+Use `validate --require-coverage` to check the complete-review requirements for the current mode. Partial results can be exported when information is insufficient.
 
 ## Output
 
@@ -128,7 +179,7 @@ Viewing records still need to be checked against actual tool calls. Passing an a
 
 ## Validation
 
-The project currently includes **61 script tests**, covering the previous strict mode, layered intervals, evidence and review checks, cache recovery, VFR timing, and subtitle/transcript inputs. Once the dependencies are ready, run:
+The current **69 script tests pass**, covering the previous strict mode, layered intervals, evidence and review checks, cache recovery, VFR timing, and subtitle/transcript inputs. This includes 8 new tests for startup without dependencies, environment diagnosis, FFmpeg paths, and DeepSeek image-tool records. Once the dependencies are ready, run:
 
 ```text
 python -X utf8 -m unittest discover -s scripts/tests -v
@@ -136,6 +187,8 @@ python -X utf8 -m unittest discover -s scripts/tests -v
 
 In one trial using a 32-frame synthetic tutorial, the layered workflow displayed 18 distinct source frames, compared with 32 in strict mode. Both recorded all 9 predefined visible-state checkpoints, with 0 errors in the final parameter value.
 
-See [Validation notes](references/validation.md) for detailed results and limitations.
+This update verified skill loading in both hosts on Windows and actual visual review using `deepseek-flash` in DeepSeek Harness. On another 32-frame synthetic recording, it completed full-frame indexing, image viewing, operation records, validation, and export. Its 55 successful image calls covered 32 original images, 22 crops, and one overview sheet; actual tool records were reconciled with evidence hashes. It correctly identified the cancelled value `0.73`, final value `0.04`, filename `measurements.csv`, and imported row count `13`. Record validation passed; missing click actions and file-identity evidence remain unresolved, and the full review gate did not pass. This update was not validated on macOS/Linux.
+
+See [Validation notes](references/validation.md) and the [host adaptation summary](validation/host-adaptation.json) for detailed results and limitations.
 
 Maintenance and acceptance criteria are documented in [Layered acceptance](references/layered-acceptance.md) and [Processing methods](references/method.md).

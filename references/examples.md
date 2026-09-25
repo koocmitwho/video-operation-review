@@ -34,7 +34,7 @@ python -X utf8 $ReviewScript record-view --work $ReviewWork --asset f000000003 `
   --observation '写实际看到的菜单、对象、参数和不清楚的区域'
 ```
 
-上述 trace/observation 是需要替换的示例，不得直接作为实际查看证据使用。脚本无法验证字符串是否真实。
+上述 trace/observation 是需要替换的示例，不得直接作为实际查看证据使用。脚本无法验证字符串是否真实。DeepSeek Harness 成功使用 `read_image` 后，将 `--tool` 改为 `read_image`，并填写那次实际调用引用；安装、依赖和模型视觉检查见 [hosts.md](hosts.md)。
 
 ## 调整候选和具体疑点
 

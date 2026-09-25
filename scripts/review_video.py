@@ -2,20 +2,20 @@
 """Local full-frame scan and evidence ledger. Run --help; no model API is called."""
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
 from vor_store import (candidate_manifest, database, dump, export_records, focus, get_meta, import_records,
                        record_view, select_candidates, status, validate)
-from vor_media import crop, extract, scan
-from vor_audit import audit_omissions
-from vor_layers import prepare, manifest, make_sheet, record_sheet_view
-from vor_language import tracks, import_subtitles, import_transcript
 
 
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     commands = p.add_subparsers(dest='command', required=True)
+    doctor = commands.add_parser('doctor', help='Check local dependencies without creating a review or testing host vision.')
+    doctor.add_argument('--ffmpeg', default=os.environ.get('VOR_FFMPEG') or 'ffmpeg')
+    doctor.add_argument('--ffprobe', default=os.environ.get('VOR_FFPROBE') or 'ffprobe')
     subs = {}
     for name, help_text in {
         'scan': 'Index original timestamps and stream every RGB frame, or resume.',
@@ -42,8 +42,8 @@ def parser():
         subs[name].add_argument('--work', required=True, type=Path, help='Dedicated review directory, one source video.')
     s = subs['scan']
     s.add_argument('video', type=Path)
-    s.add_argument('--ffmpeg', default='ffmpeg')
-    s.add_argument('--ffprobe', default='ffprobe')
+    s.add_argument('--ffmpeg', default=os.environ.get('VOR_FFMPEG') or 'ffmpeg')
+    s.add_argument('--ffprobe', default=os.environ.get('VOR_FFPROBE') or 'ffprobe')
     s.add_argument('--tile-size', type=int, default=32)
     s.add_argument('--pixel-threshold', type=int, default=8)
     s.add_argument('--checkpoint-frames', type=int, default=100)
@@ -70,14 +70,14 @@ def parser():
     group = s.add_mutually_exclusive_group(required=True)
     group.add_argument('--candidates', action='store_true')
     group.add_argument('--frames', help='Comma-separated original 0-based frame ordinals.')
-    s.add_argument('--ffmpeg', default='ffmpeg')
+    s.add_argument('--ffmpeg', default=os.environ.get('VOR_FFMPEG') or 'ffmpeg')
     s = subs['crop']
     s.add_argument('--asset', required=True)
     s.add_argument('--box', required=True, help='x0,y0,x1,y1 in original image pixels, right/bottom exclusive.')
     s = subs['record-view']
     s.add_argument('--asset', required=True)
     s.add_argument('--actor', required=True)
-    s.add_argument('--tool', required=True, choices=['view_image', 'image_tool', 'visible_attachment'])
+    s.add_argument('--tool', required=True, choices=['view_image', 'read_image', 'image_tool', 'visible_attachment'])
     s.add_argument('--trace', required=True, help='Real image tool call/message reference, not a filename.')
     s.add_argument('--observation', required=True, help='What was actually visible, including unreadable regions.')
     subs['import-records'].add_argument('records', type=Path)
@@ -91,13 +91,13 @@ def parser():
     s.add_argument('--actor', required=True)
     s.add_argument('--trace', required=True)
     s.add_argument('--observations', required=True, type=Path, help='JSON object: only actually displayed asset IDs to observations.')
-    subs['tracks'].add_argument('--ffprobe', default='ffprobe')
+    subs['tracks'].add_argument('--ffprobe', default=os.environ.get('VOR_FFPROBE') or 'ffprobe')
     s = subs['subtitles']
     s.add_argument('source', type=Path)
     s.add_argument('--offset', type=float, default=0.0, help='original_video_time = subtitle_time + offset')
     s.add_argument('--language', default='und')
     s.add_argument('--stream', type=int, default=0, help='Subtitle s:N ordinal; text tracks only.')
-    s.add_argument('--ffmpeg', default='ffmpeg')
+    s.add_argument('--ffmpeg', default=os.environ.get('VOR_FFMPEG') or 'ffmpeg')
     subs['transcript'].add_argument('source', type=Path)
     subs['validate'].add_argument('--require-coverage', action='store_true',
                                   help='Require the selected mode coverage, continuity and a current recorded independent review.')
@@ -111,6 +111,16 @@ def parser():
 def main():
     args = parser().parse_args()
     try:
+        if args.command == 'doctor':
+            from vor_environment import diagnose
+            result = diagnose(args.ffmpeg, args.ffprobe)
+            print(dump(result))
+            return 0 if result['ready'] else 1
+        # Help and diagnosis must work even before optional runtime packages exist.
+        from vor_media import crop, extract, scan
+        from vor_audit import audit_omissions
+        from vor_layers import prepare, manifest, make_sheet, record_sheet_view
+        from vor_language import tracks, import_subtitles, import_transcript
         with database(args.work, create=args.command == 'scan') as conn:
             command = args.command
             if command == 'scan':
@@ -171,6 +181,10 @@ def main():
     except KeyboardInterrupt:
         print(dump({'error': 'Interrupted; committed rows retained. Run status then resume scan.'}))
         return 130
+    except ModuleNotFoundError as exc:
+        print(dump({'error': str(exc), 'type': type(exc).__name__,
+                    'hint': 'Run doctor with the same Python executable, then install the missing requirements.'}))
+        return 1
     except Exception as exc:
         print(dump({'error': str(exc), 'type': type(exc).__name__}))
         return 1

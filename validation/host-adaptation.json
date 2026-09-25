@@ -1,0 +1,87 @@
+{
+  "date": "2026-09-25",
+  "schema_version": 3,
+  "default_mode": "layered",
+  "tests": {
+    "baseline_passed": 61,
+    "new_red_failures_before_implementation": 8,
+    "final_passed": 69,
+    "final_failed": 0,
+    "seconds": 78.203
+  },
+  "python_310_regression": {
+    "python": "3.10.11",
+    "numpy": "2.2.6",
+    "pillow": "12.0.0",
+    "passed": 69,
+    "failed": 0,
+    "seconds": 141.390
+  },
+  "environment": {
+    "os": "Windows",
+    "python": "3.12.10",
+    "numpy": "2.5.1",
+    "pillow": "12.3.0",
+    "ffmpeg": "8.1.2",
+    "ffprobe": "8.1.2"
+  },
+  "codex_discovery": {
+    "version": "0.146.0",
+    "method": "Isolated app-server skills/list against a project .agents/skills bundle",
+    "discovered": true,
+    "enabled": true,
+    "interface_loaded": true,
+    "errors": 0,
+    "model_session_created": false
+  },
+  "deepseek_discovery": {
+    "cli_version": "0.1.5-rc.2",
+    "provider": "@deepseek-ai/dsh-skill-filesystem",
+    "provider_version": "0.1.5-rc.3",
+    "method": "Installed FileSystemSkillProvider.list/get on an isolated project .agents/skills bundle",
+    "discovered": true,
+    "body_matches": true,
+    "resource_base_matches": true,
+    "warnings": 0,
+    "live_profile_changed": false,
+    "model_session_created": false,
+    "model_image_route_tested": false
+  },
+  "codex_image_smoke": {
+    "synthetic_source_frames": 8,
+    "computed_frames": 8,
+    "actual_displayed_source_frames": 1,
+    "recorded_visual_unique_frames_before": 0,
+    "recorded_visual_unique_frames_after": 1,
+    "full_video_review_completed": false
+  },
+  "deepseek_legacy_discovery": {
+    "provider_version": "0.1.0-rc.6",
+    "discovered": true,
+    "body_matches": true,
+    "resource_base_matches": true,
+    "warnings": 0,
+    "model_session_created": false,
+    "model_image_route_tested": false
+  },
+  "skill_format": "passed",
+  "deepseek_visual_followup": {
+    "model_image_route_tested": true,
+    "model": "deepseek-flash",
+    "successful_read_image_calls": 55,
+    "unique_source_frames": 32,
+    "record_validation_passed": true,
+    "review_gate_passed_recorded": false,
+    "details": "deepseek-visual-review.json"
+  },
+  "model_compatibility": {
+    "basis_date": "2026-09-25",
+    "new_model_bases": ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "deepseek-flash"],
+    "older_visual_models": "capability-based compatibility; not an exhaustive model benchmark",
+    "text_only_models": "incompatible; stop review without text-only fallback",
+    "model_profiles_modified": false
+  },
+  "real_user_video_validation": "not_run_in_this_update",
+  "semantic_completeness_proven": false,
+  "evidence_boundary": "Host discovery and local processing checks do not prove full model-driven review. Raw local tool receipts remain outside this repository. read_image unit-test attestations are synthetic."
+}

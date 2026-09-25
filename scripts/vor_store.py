@@ -326,7 +326,7 @@ def require_asset(conn, work, asset_id):
 
 
 def record_view(conn, work, asset_id, actor, tool, trace, observation):
-    if tool not in {'view_image', 'image_tool', 'visible_attachment'}:
+    if tool not in {'view_image', 'read_image', 'image_tool', 'visible_attachment'}:
         raise ValueError('Only actual image viewing qualifies; OCR, diff, export and file listing do not.')
     if not all(s.strip() for s in [actor, trace, observation]):
         raise ValueError('Actor, actual tool-call reference and visual observation are required.')

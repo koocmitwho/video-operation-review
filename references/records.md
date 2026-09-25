@@ -61,7 +61,7 @@
 
 ## 查看登记与审计
 
-`record-view` 需要已导出的 asset ID、观察者、图片工具类型、实际调用/消息引用、具体视觉观察。可用工具类型为 `view_image`、`image_tool`、`visible_attachment`；使用 `image_tool` 时在 trace 中写明真实工具名称。工具成功返回图片后才能登记，不把文件名当工具调用位置。
+`record-view` 需要已导出的 asset ID、观察者、图片工具类型、实际调用/消息引用、具体视觉观察。可用工具类型为 `view_image`、`read_image`、`image_tool`、`visible_attachment`；DeepSeek Harness 的图片读取直接登记为 `read_image`。使用其他工具并归类为 `image_tool` 时，在 trace 中写明真实工具名称。工具成功返回图片后才能登记，不把文件名当工具调用位置。文字读取、OCR 及不支持图像的模型返回均不算看图。
 
 记录说明应能支持复核，例如：“frame 37，Rate 框为 5，Apply 按钮可见；状态栏被遮住”。不能仅写“已查看”。同一帧反复打开会保存多条事件，但去重计数不变。仅有裁剪的登记计入曾看过的源帧数，候选的完成还需全图查看记录。
 

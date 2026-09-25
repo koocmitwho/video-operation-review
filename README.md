@@ -30,7 +30,7 @@ flowchart LR
 
 默认采用 `layered` 分层模式。需要穷尽复核时，可显式选择 `coverage` 并使用 `strict` 审计；旧审阅数据库迁移后保留原严格模式与历史记录。
 
-分段建议由图像变化和时间线特征产生。ai助手需要实际看图，确定区间含义和操作步骤。
+分段建议由图像变化和时间线特征产生。AI 助手需要实际看图，确定区间含义和操作步骤。
 
 ## 环境要求
 
@@ -38,6 +38,8 @@ flowchart LR
 - NumPy、Pillow；依赖列表见 [requirements.txt](requirements.txt)。
 - 可调用的 FFmpeg 与 ffprobe，FFmpeg 需支持 `-fps_mode passthrough`。
 - 用于语义审阅的宿主助手需要能读取文件、执行本地命令，并实际查看图片。
+
+**纯文本模型不兼容本 skill。** 模型和当前宿主都必须支持实际图片输入。
 
 已在 Windows 上验证 Python 3.10.11 与 Python 3.12.10，使用 FFmpeg 8.1.2。
 
@@ -50,13 +52,62 @@ python -m pip install -r requirements.txt
 
 ## 开始使用
 
-### 让ai助手执行审阅
+### 在 Codex 和 DeepSeek Harness 中安装
+
+两边使用同一份 skill 和同一套审阅记录。默认情况下，可将完整仓库放入用户目录下的 `.agents/skills/video-operation-review`。
+
+Windows PowerShell：
+
+```powershell
+git clone https://github.com/koocmitwho/video-operation-review.git "$env:USERPROFILE\.agents\skills\video-operation-review"
+```
+
+macOS / Linux shell：
+
+```bash
+git clone https://github.com/koocmitwho/video-operation-review.git "$HOME/.agents/skills/video-operation-review"
+```
+
+若目标目录已存在，先检查其中的版本和本地修改。也可下载 ZIP 后把完整目录放到该位置；确认 `SKILL.md` 紧接在 `video-operation-review` 目录内。
+
+仅用于一个项目时，放入 `<项目根>/.agents/skills/video-operation-review/`。DeepSeek Harness 如使用自定义 `DSH_AGENTS_HOME`，需按实际配置放置；只给 DSH 使用时，也可以放入 `<DSH_HOME>/skills/video-operation-review/`。
+
+| 宿主 | 调用方式 | 看图要求 |
+|---|---|---|
+| Codex | 明确使用 `$video-operation-review`，或按任务自动选择 | 当前环境提供可用的图片查看工具，例如 `view_image` |
+| DeepSeek Harness | 要求使用 `video-operation-review`，由已有的 skill 加载工具读取 | `read_image`、附件服务和支持图像输入的当前模型 |
+
+DeepSeek Harness 需要已启用本地 skill 发现与加载。该仓库按文件系统 skill 使用。详细的目录、工具差异和排查方法见 [宿主适配说明](references/hosts.md)；目录规范参考 [Codex 官方文档](https://learn.chatgpt.com/docs/build-skills) 与 [DeepSeek Harness 官方文档](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/skill/skill-filesystem)。
+
+### 先检查环境
+
+从仓库根目录运行：
+
+```text
+python scripts/review_video.py doctor
+```
+
+诊断检查当前 Python、NumPy、Pillow、FFmpeg 和 ffprobe，输出 JSON；退出码 0 表示本地处理依赖通过，1 表示存在缺项。它不安装软件或创建审阅数据库。缺少 NumPy/Pillow 时，诊断和 `--help` 仍可使用。
+
+如果桌面宿主没有继承终端的 PATH，可用 `--ffmpeg` / `--ffprobe` 指定完整程序路径，或在同一进程环境设置 `VOR_FFMPEG` / `VOR_FFPROBE`；命令参数优先。使用虚拟环境时，请用同一 Python 解释器安装依赖、诊断和运行脚本。
+
+**依赖检查通过不等于模型具备视觉能力。** 纯文本模型直接标明不兼容并停止审阅；图片模型的工具缺失、文件不可访问等问题则说明具体阻碍。
+
+### 新模型与旧模型兼容
+
+本次以 Codex 的 GPT-6 系列和 DeepSeek Harness 的 DeepSeek-V4.1-Flash（`deepseek-flash`）作为新模型优化基准：按操作关系组织证据、减少重复说明，并针对图片缩放补看局部裁剪。模型基准来自 [OpenAI 模型目录](https://developers.openai.com/api/docs/models) 和 [DeepSeek 更新日志](https://api-docs.deepseek.com/updates/)。
+
+同时兼容仍具备图像输入和必要工具能力的旧模型：上下文较小时缩小每批操作范围，逐批保存并恢复进度；没有异步或子代理工具时使用顺序流程。
+
+新旧型号的具体策略、图片清晰度和能力检查见 [模型适配说明](references/models.md)。型号兼容规则与实际验收结果分别记录。
+
+### 让 AI 助手执行审阅
 
 下载或克隆本仓库后，可以向能访问该目录的助手提出：
 
 > 请按照本目录 `SKILL.md` 的 video-operation-review 流程审阅这段软件教程。先检查已有结果，再做完整索引、分层粗审和关键操作精审。交付可复现的步骤、关键证据及未解决项，分别报告计算覆盖、审阅覆盖和实际看图数量。
 
-技能入口是 [SKILL.md](SKILL.md)。直接读取仓库即可使用其中的流程，无需本项目自动修改宿主的全局配置。
+技能入口是 [SKILL.md](SKILL.md)。未安装到发现目录时，也可直接让助手读取该文件。宿主从其他工作目录调用时，使用脚本的绝对路径，并为输入视频和 `--work` 明确指定位置。
 
 ### 使用命令行准备证据
 
@@ -96,7 +147,7 @@ python scripts/review_video.py audit --work ./work/tutorial --summary
 python scripts/review_video.py export --work ./work/tutorial
 ```
 
-需要检查当前模式的完整审阅条件时，使用 `validate --require-coverage`。信息不足时允许导出部分结果，但会保留缺口。
+需要检查当前模式的完整审阅条件时，使用 `validate --require-coverage`。信息不足时允许导出部分结果。
 
 ## 输出内容
 
@@ -127,7 +178,7 @@ python scripts/review_video.py export --work ./work/tutorial
 
 ## 验证情况
 
-当前包含 **61 项脚本测试**，覆盖旧严格模式、分层区间、证据与复核、缓存恢复、VFR 时间，以及字幕/转写输入等行为。可在准备好依赖后运行：
+当前 **69 项脚本测试通过**，覆盖旧严格模式、分层区间、证据与复核、缓存恢复、VFR 时间，以及字幕/转写输入等行为；包含本次新增的 8 项缺依赖启动、环境诊断、FFmpeg 路径和 DeepSeek 图片工具记录测试。可在准备好依赖后运行：
 
 ```text
 python -X utf8 -m unittest discover -s scripts/tests -v
@@ -135,7 +186,9 @@ python -X utf8 -m unittest discover -s scripts/tests -v
 
 一次 32 帧合成教程试用中，分层方式实际显示了 18 个不同源帧，严格方式为 32 个；两者均记录了 9 个预设可见状态检查点，最终参数错误为 0。
 
-详细结果与限制见 [验证说明](references/validation.md)。
+本次在 Windows 上完成两边的技能加载检查，以及 DeepSeek Harness `deepseek-flash` 的实际视觉审阅：对另一段 32 帧合成录屏完成全帧索引、看图、操作记录、校验和导出。55 次成功图片调用覆盖 32 张原图、22 张裁剪和 1 张拼图，真实工具记录与证据哈希已核对；取消值 `0.73`、最终值 `0.04`、文件名 `measurements.csv` 和导入行数 `13` 均识别正确。记录校验通过，素材缺失的点击过程及文件同一性继续保留为疑点，完整审阅门禁未通过。macOS/Linux 本次未运行验收。
+
+详细结果与限制见 [验证说明](references/validation.md) 和 [本次适配验证摘要](validation/host-adaptation.json)。
 
 
 维护与验收约定见 [分层验收](references/layered-acceptance.md) 和 [处理方法](references/method.md)。

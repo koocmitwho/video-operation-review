@@ -1,0 +1,64 @@
+{
+  "date": "2026-09-25",
+  "fixture": {
+    "kind": "synthetic software UI",
+    "frames": 32,
+    "width": 640,
+    "height": 360,
+    "fps": 8,
+    "duration_seconds": 4,
+    "codec": "FFV1",
+    "source_sha256": "a46b542c08ecbbf85b9f404f065a1a480a087ccd663c71e15f872fb5a9aeabac",
+    "generator_and_truth_provided_to_model": false
+  },
+  "runtime": {
+    "host": "DeepSeek Harness headless",
+    "cli_version": "0.1.5-rc.2",
+    "provider_version": "0.1.5-rc.3",
+    "provider": "deepseek-official",
+    "model": "deepseek-flash",
+    "turn_completed": true,
+    "process_exit_code": 0,
+    "existing_profiles_modified": false
+  },
+  "actual_image_evidence": {
+    "successful_read_image_calls": 55,
+    "original_images": 32,
+    "crop_images": 22,
+    "overview_sheets": 1,
+    "recorded_view_events": 64,
+    "overview_panel_records": 10,
+    "unique_source_frames": 32,
+    "attachment_hashes_match_evidence_files": true,
+    "all_view_records_matched_to_actual_image_results": true
+  },
+  "review": {
+    "indexed_frames": 32,
+    "computed_frames": 32,
+    "coarse_reviewed_frames": 32,
+    "fine_examined_frames": 9,
+    "fine_reviewed_frames": 0,
+    "steps": 6,
+    "intervals": 6,
+    "open_issues": 9,
+    "cancelled_value": "0.73",
+    "previous_applied_value": "0.85",
+    "final_applied_value": "0.04",
+    "visible_filename": "measurements.csv",
+    "visible_import_rows": 13,
+    "parameter_and_handoff_checks": "passed",
+    "unseen_clicks_and_file_identity_left_unresolved": true,
+    "record_validation_passed": true,
+    "export_succeeded": true,
+    "review_gate_passed_recorded": false,
+    "review_kind": "self_review",
+    "semantic_completeness_proven": false
+  },
+  "prepublication_tests": {"passed": 69, "failed": 0, "seconds": 78.896},
+  "limits": [
+    "A bounded synthetic recording, not a real-user-video benchmark.",
+    "Actual tool receipts were checked separately; ledger independent-vision count remains null.",
+    "No claimed frame-count, token, time, or cost savings.",
+    "Raw sessions, local paths, images, and databases remain outside the public repository."
+  ]
+}
