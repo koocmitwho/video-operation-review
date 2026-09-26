@@ -2,6 +2,7 @@
 import hashlib
 import json
 import math
+from functools import lru_cache
 from pathlib import Path
 import subprocess
 
@@ -176,11 +177,24 @@ def read_ppm(stream):
     return np.frombuffer(raw, dtype=np.uint8).reshape(height, width, 3)
 
 
+@lru_cache(maxsize=16)
+def _filter_file_option(ffmpeg):
+    """Keep large graphs in files across legacy and current FFmpeg interfaces."""
+    probe = subprocess.run([ffmpeg, '-hide_banner', '-h', 'full'],
+                           capture_output=True, timeout=10, **process_options())
+    if probe.returncode:
+        raise RuntimeError(f'Cannot inspect FFmpeg filter-file options (exit {probe.returncode}).')
+    # Older FFmpeg lacks generic file-backed options; newer versions removed
+    # filter_script. Detect the installed interface instead of parsing versions.
+    legacy = any(line.startswith(b'-filter_script') for line in probe.stdout.splitlines())
+    return '-filter_script:v' if legacy else '-/filter:v'
+
+
 def decoder(video, ffmpeg, log, filter_file=None, count=None):
     args = [ffmpeg, '-hide_banner', '-nostdin', '-v', 'error', '-noautorotate', '-copyts',
             '-i', str(video), '-map', '0:v:0', '-an', '-sn', '-dn']
     if filter_file:
-        args += ['-filter_script:v', str(filter_file)]
+        args += [_filter_file_option(ffmpeg), str(filter_file)]
     args += ['-fps_mode', 'passthrough', '-c:v', 'ppm', '-pix_fmt', 'rgb24']
     if count is not None:
         args += ['-frames:v', str(count)]

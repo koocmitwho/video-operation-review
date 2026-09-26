@@ -2,9 +2,17 @@
 
 本页说明当前版本已经验证的工程行为和仍未证明的范围。源码、技能格式、实际看图和语义正确性是不同层次的证据。
 
+## 发布 CI 兼容修复（2026-09-26）
+
+首轮远端 [CI](https://github.com/koocmitwho/video-operation-review/actions/runs/36223015593) 中 Ubuntu 的 Python 3.10/3.12 两组通过；Windows 两组因 FFmpeg 9.0.2 移除 `-filter_script:v`，以及测试未规范化临时目录 8.3 短路径而失败。失败记录保留，没有跳过失败测试。
+
+修复后按 FFmpeg 实际帮助输出选择旧文件滤镜参数或 `-/filter:v`；表达式仍放在文件中。兼容测试模拟两代接口并用本机真实解码器核对像素，完整 CI 会使用各平台实际安装的接口。文件枚举故障注入统一解析路径，且断言指定异常确实命中；真实 8.3 临时目录下已复测通过。
+
+本地 Windows / Python 3.12.10 和 3.10.11 均重新通过 **98 项测试**，分别耗时 101.492 秒和 165.566 秒；两套回归并行运行。新增接口用例已先在旧代码上确认失败，再验证修复。当前提交的远端结果以对应 [工作流运行](https://github.com/koocmitwho/video-operation-review/actions/workflows/tests.yml) 为准。[本地验证摘要](../validation/ci-compatibility-20260926.json) 保留环境和边界。
+
 ## 可靠性与性能优化（2026-09-26）
 
-主开发目录合并了原开发版本的两项真实试用修复与发布副本的宿主适配。当前 97 项测试在 Windows 的 Python 3.12.10 和 3.10.11 下分别全部通过，耗时 105.291 秒和 171.876 秒；两套测试并行运行，耗时不用于版本间性能对比。新增行为均保存了修改前失败用例，随后完成实现和完整回归。
+主开发目录合并了原开发版本的两项真实试用修复与发布副本的宿主适配。首轮 97 项测试在 Windows 的 Python 3.12.10 和 3.10.11 下分别全部通过，耗时 105.291 秒和 171.876 秒；两套测试并行运行，耗时不用于版本间性能对比。新增行为均保存了修改前失败用例，随后完成实现和完整回归。
 
 - 角色复核按实际裁剪区域检查：不相交、部分覆盖及小裁剪替代全图被阻断；对应区域、覆盖裁剪、完整原图与合法连续重复帧等价通过。
 - 严格与分层模式共用复核调用关联检查，未关联或失效的 actor / asset / frame / hash / trace 不能通过。
@@ -14,7 +22,7 @@
 
 60,000 帧 / 1,000 字幕的本地合成微基准：重复 PTS 从 1.695 秒降至 0.091 秒，倒退 PTS 从 1.702 秒降至 0.092 秒；三种基准的 cue 与 warning 内容哈希均保持一致。正常 PTS 从 0.079 秒增至 0.091 秒，存在建索引成本。这个结果不是实际长视频总耗时或固定节省率。
 
-环境：FFmpeg/ffprobe 8.1.2；Python 3.12 对应 NumPy 2.5.1 / Pillow 12.3.0，Python 3.10 对应 NumPy 2.2.6 / Pillow 12.0.0。技能格式和本地 Markdown 链接检查通过。CI 已添加 Windows/Ubuntu × Python 3.10/3.12 配置，远端尚未执行，不能据此声称 Linux 已验证。
+环境：FFmpeg/ffprobe 8.1.2；Python 3.12 对应 NumPy 2.5.1 / Pillow 12.3.0，Python 3.10 对应 NumPy 2.2.6 / Pillow 12.0.0。技能格式和本地 Markdown 链接检查通过。此阶段只完成 Windows/Ubuntu × Python 3.10/3.12 的 CI 配置，随后远端执行与兼容修复见上节。
 
 本轮未重跑历史视频、启动模型视觉会话或运行 OCR/ASR；合成查看登记不计实际看图。数据库 schema 仍为 3。摘要与日志：[reliability-20260926.json](../validation/reliability-20260926.json)、[Python 3.12](../validation/reliability-python312.log)、[Python 3.10](../validation/reliability-python310.log)。以下保留历史验证结果，历史测试数量不表示当前数量。
 

@@ -93,6 +93,54 @@ class MediaScalingContract(unittest.TestCase):
             media.extract(self.conn, self.work, [0])
         self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM assets').fetchone()[0], 0)
 
+    def test_filter_file_option_works_when_legacy_flag_has_been_removed(self):
+        media.scan(self.conn, self.work, self.small)
+        real_run, real_popen = subprocess.run, subprocess.Popen
+        help_text = real_run(['ffmpeg', '-hide_banner', '-h', 'full'], capture_output=True,
+                             **media.process_options()).stdout
+        installed_flag = ('-filter_script:v' if any(line.startswith(b'-filter_script')
+                          for line in help_text.splitlines()) else '-/filter:v')
+        for modern, frame in [(False, 0), (True, 2)]:
+            with self.subTest(modern=modern):
+                selected = []
+                probe = getattr(media, '_filter_file_option', None)
+                if probe is not None:
+                    probe.cache_clear()
+                    self.addCleanup(probe.cache_clear)
+
+                def option_help(args, **kwargs):
+                    if '-h' in args:
+                        output = (b'-filter[:stream_spec] <filtergraph>\n' if modern else
+                                  b'-filter_script[:stream_spec] <filename> read filtergraph\n')
+                        return subprocess.CompletedProcess(args, 0, stdout=output, stderr=b'')
+                    return real_run(args, **kwargs)
+
+                def installed_decoder(args, **kwargs):
+                    if '-filter_script:v' in args or '-/filter:v' in args:
+                        selected.append(args)
+                    unsupported = '-filter_script:v' if modern else '-/filter:v'
+                    if unsupported in args:
+                        # Emulate either CLI generation on any installed version.
+                        code = ('import sys; sys.stderr.write("Unrecognized option filter_script:v\\n"); '
+                                'sys.exit(2)')
+                        return real_popen([sys.executable, '-B', '-c', code], **kwargs)
+                    forwarded = list(args)
+                    for flag in ('-filter_script:v', '-/filter:v'):
+                        if flag in forwarded:
+                            forwarded[forwarded.index(flag)] = installed_flag
+                    return real_popen(forwarded, **kwargs)
+
+                with patch.object(subprocess, 'run', side_effect=option_help), \
+                     patch.object(subprocess, 'Popen', side_effect=installed_decoder):
+                    try:
+                        result = media.extract(self.conn, self.work, [frame])
+                    except Exception as exc:
+                        self.fail(f'File-backed filters must support this FFmpeg interface: {exc}')
+                self.assertEqual(result['extracted_new'], 1)
+                self.assertIn('-/filter:v' if modern else '-filter_script:v', selected[-1])
+                with Image.open(self.work / 'evidence' / f'f{frame:09d}.png') as image:
+                    self.assertEqual(image.getpixel((0, 0)), (frame, 0, 13))
+
     def test_budget_exactly_at_tail_finishes_without_an_extra_decode(self):
         result = media.scan(self.conn, self.work, self.small, max_new_frames=8)
         self.assertTrue(result['full_compute_complete'])

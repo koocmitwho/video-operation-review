@@ -80,11 +80,15 @@ class ReleaseTreeContract(unittest.TestCase):
     def test_directory_enumeration_failure_never_reports_identical(self):
         self.put(self.target, 'unreadable/extra.py', 'unmanaged target content')
         self.assertFalse(check_release.compare(self.source, self.target)['identical'])
-        denied = self.target / 'unreadable'
+        # A deliberately noncanonical spelling exercises the same mismatch as
+        # Windows TEMP paths using an 8.3 alias before inventory resolves them.
+        denied = self.target / '..' / self.target.name / 'unreadable'
         original = os.scandir
+        injected = []
 
         def unreadable(path):
-            if Path(path) == denied:
+            if Path(path).resolve() == denied.resolve():
+                injected.append(path)
                 raise PermissionError('Synthetic directory enumeration failure')
             return original(path)
 
@@ -92,8 +96,10 @@ class ReleaseTreeContract(unittest.TestCase):
         with patch('os.scandir', side_effect=unreadable):
             for source in (self.source, self.target):
                 with self.subTest(same_root=source == self.target):
-                    with self.assertRaises(PermissionError):
+                    before = len(injected)
+                    with self.assertRaisesRegex(PermissionError, 'Synthetic directory enumeration failure'):
                         check_release.compare(source, self.target)
+                    self.assertEqual(len(injected), before + 1, 'The intended scandir failure was not injected')
 
     def test_nonignored_directory_link_is_rejected(self):
         destination = self.target / 'real-directory'

@@ -163,7 +163,7 @@ python scripts/review_video.py export --work ./work/tutorial
 
 ## 验证情况
 
-2026-09-26 在 Windows / Python 3.10 和 3.12 下分别重新运行，**两套环境均为 97 项脚本测试全部通过**。保留旧严格模式、分层流程、宿主适配和帧数口径修复，并新增裁剪区域复核、调用引用关联、600 个稀疏帧抽取、预算末帧、异常时间戳对齐和发布副本差异检查。可在准备好依赖后运行：
+2026-09-26 在 Windows / Python 3.10 和 3.12 下分别重新运行，**两套环境均为 98 项脚本测试全部通过**。保留旧严格模式、分层流程、宿主适配和帧数口径修复，并新增裁剪区域复核、调用引用关联、600 个稀疏帧抽取、预算末帧、异常时间戳对齐、FFmpeg 新旧文件滤镜接口和发布副本差异检查。可在准备好依赖后运行：
 
 ```text
 python -X utf8 -m unittest discover -s scripts/tests -v
@@ -171,7 +171,7 @@ python -X utf8 -m unittest discover -s scripts/tests -v
 
 一次 32 帧合成教程试用中，分层方式实际显示了 18 个不同源帧，严格方式为 32 个；两者均记录了 9 个预设可见状态检查点，最终参数错误为 0。
 
-2026-09-25 在 Windows 上完成两边的技能加载检查，以及 DeepSeek Harness `deepseek-flash` 的实际视觉审阅：对另一段 32 帧合成录屏完成全帧索引、看图、操作记录、校验和导出。55 次成功图片调用覆盖 32 张原图、22 张裁剪和 1 张拼图，真实工具记录与证据哈希已核对；取消值 `0.73`、最终值 `0.04`、文件名 `measurements.csv` 和导入行数 `13` 均识别正确。记录校验通过，素材缺失的点击过程及文件同一性继续保留为疑点，完整审阅门禁未通过。这是历史视觉试用，2026-09-26 的优化验证使用合成测试；macOS/Linux 尚无本轮运行验收。
+2026-09-25 在 Windows 上完成两边的技能加载检查，以及 DeepSeek Harness `deepseek-flash` 的实际视觉审阅：对另一段 32 帧合成录屏完成全帧索引、看图、操作记录、校验和导出。55 次成功图片调用覆盖 32 张原图、22 张裁剪和 1 张拼图，真实工具记录与证据哈希已核对；取消值 `0.73`、最终值 `0.04`、文件名 `measurements.csv` 和导入行数 `13` 均识别正确。记录校验通过，素材缺失的点击过程及文件同一性继续保留为疑点，完整审阅门禁未通过。这是历史视觉试用，2026-09-26 的优化验证使用合成测试；macOS 未运行验收，Windows/Linux 的远端结果见对应提交的 [CI](https://github.com/koocmitwho/video-operation-review/actions/workflows/tests.yml)。
 
 详细结果与限制见 [验证说明](references/validation.md) 和 [本次适配验证摘要](validation/host-adaptation.json)。
 
