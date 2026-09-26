@@ -100,7 +100,7 @@ class OmissionContract(unittest.TestCase):
         return {'id': 'R1', 'reviewer': 'test-reviewer', 'independence': 'independent',
                 'snapshot': audit['snapshot'], 'checked_state_frames': [0, 3, 4, 6],
                 'evidence': [f'f{n:09d}' for n in [0, 3, 4, 6]],
-                'tool_trace_refs': ['synthetic-test://review-not-actual-view'],
+                'tool_trace_refs': ['synthetic-test://not-an-actual-view'],
                 'issue_ids': [], 'conclusion': 'no_additional_omissions_found',
                 'note': 'Synthetic unit fixture, not proof of independent model inspection.'}
 
@@ -167,6 +167,18 @@ class OmissionContract(unittest.TestCase):
         audit = self.cli('audit')
         self.assertIn('reviewer_view_missing', self.codes(audit))
         self.assertFalse(audit['review_gate_passed_recorded'])
+
+    def test_review_tool_trace_must_match_reviewer_evidence(self):
+        self.prepare()
+        self.import_data(self.good_records())
+        review=self.review_record(self.cli('audit'))
+        self.import_data({'omission_reviews':[review]})
+        self.assertTrue(self.cli('audit')['review_gate_passed_recorded'])
+        review['tool_trace_refs']=['synthetic-test://no-such-call']
+        self.import_data({'omission_reviews':[review]})
+        audit=self.cli('audit')
+        self.assertFalse(audit['review_gate_passed_recorded'])
+        self.assertIn('review_trace_unlinked',self.codes(audit))
 
     def test_state_discontinuity_detects_missing_intermediate_change(self):
         self.prepare()

@@ -50,4 +50,6 @@ description: 审阅软件教学、建模、编程和数据处理录屏，还原�
 
 ## 维护
 
+开发和发布副本的差异检查见 [maintenance.md](references/maintenance.md)。
+
 改脚本前读 [layered-acceptance.md](references/layered-acceptance.md) 和历史 [acceptance.md](references/acceptance.md)，先失败用例后实现。实测结果见 [validation.md](references/validation.md)。合成视频测试与真实用户视频验收分列；未经试用不能推广操作完整性或成本效果。

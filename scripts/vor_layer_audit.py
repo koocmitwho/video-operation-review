@@ -71,7 +71,7 @@ def audit_layers(conn,work,queue=False,base_validation=None):
                     if c['method']!='exhaustive' or not old or old['conclusion']!='expand' or not prior or not prior<=covered_targets(conn,prior,seen):
                         audit.finding('expansion_scope_incomplete',f"抽查 {c['id']} 未穷尽查看被引用异常 {ref} 的原范围。",sorted(prior),stage='sampling')
                     else: valid_resolutions.add(ref)
-        if relevant and not valid and any(c['scope_hash']!=req['scope_hash'] for c in relevant):
+        if relevant and not current and any(c['scope_hash']!=req['scope_hash'] for c in relevant):
             audit.finding('interval_sample_stale',f'区间 {ident} 的旧抽查已过期；需当前范围复核。',req['frames'],stage='sampling')
         if req['required'] and not current:
             audit.finding('interval_sample_missing',f'合并/低优先级区间 {ident} 尚未完成风险与随机抽查。',req['frames'],stage='sampling')
@@ -136,21 +136,20 @@ def _review(conn,audit,entries,requirements,snapshot):
         bounds={e['start_frame'],e['end_frame']}
         targets=set(requirements[e['id']]['frames']) if requirements[e['id']]['required'] else set()
         # Review final/before/critical role evidence natively, not every RGB state.
-        role_targets=set()
+        role_targets=set(); role_assets=set()
         for sid in e['step_ids']:
             step=audit.steps.get(sid,{})
             for refs in step.get('role_evidence',{}).values():
                 for ref in refs:
                     asset=audit.assets.get(ref)
-                    if asset: role_targets.add(asset['frame_no'])
+                    if asset:
+                        role_targets.add(asset['frame_no'])
+                        role_assets.add(ref)
         if bounds-covered_targets(conn,bounds,seen) or targets-covered_targets(conn,targets,native):
             audit.finding('reviewer_view_missing',f"复核者尚缺区间 {e['id']} 的代表画面或抽查原图。",bounds|targets,stage='review')
-        native_any=viewed_frames(conn,r['evidence'],r['reviewer'],native=True)
-        if role_targets-covered_targets(conn,role_targets,native_any):
+        if any(not audit.native_asset_covered(ref,r['evidence'],r['reviewer']) for ref in role_assets):
             audit.finding('reviewer_fine_view_missing',f"复核者尚缺 {e['id']} 的操作角色精审证据。",role_targets,stage='review')
-    actual_traces={v['trace_ref'] for v in audit.views if v['actor']==r['reviewer'] and v['asset_id'] in r['evidence']}
-    if not set(r['tool_trace_refs'])<=actual_traces:
-        audit.finding('review_trace_unlinked','复核调用引用未关联该复核者的证据查看登记。',stage='review')
+    audit.review_trace_links(r)
     for issue in r['issue_ids']:
         if issue not in audit.issues or audit.issues[issue]['status']!='resolved':
             audit.finding('review_issue_unresolved','复核仍有缺失/未解决疑点 '+issue,stage='review')

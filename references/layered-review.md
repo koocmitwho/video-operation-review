@@ -65,6 +65,8 @@ python -X utf8 $ReviewScript record-sheet-view --work $ReviewWork --sheet '实�
 
 这些图必须位于该步骤帧范围内、顺序正确、均列入步骤顶层 evidence，且该作者实际查看了原图或裁剪。before/during/after 可以在素材只给静态状态时引用同帧，但必须说明证据限制，不能据此补出点击过程。确认/结果仍要在 transition 内 observed 或有理由的 not_applicable；未展示则 partial 加 issue。
 
+独立复核也要覆盖角色证据的实际图像区域：可查看该资产本身、包含整个目标区域的裁剪或完整原图；同帧的无关小裁剪不能代替。嵌套裁剪按源图绝对区域核对，只允许同一连续精确重复段的画面等价，不把后来再次出现的相似画面算作已复核。
+
 `final_parameters` 只写确认后的值；临时 0.20、取消、重输 0.02 应按可见过程区分。对话框消失本身不能证明 Apply；可见控件不存在可用 `{"visible": false}`，业务值未知才用 null。
 
 文件交接使用同一个稳定逻辑键，例如两个步骤的 `transition.after["file:exchange"]` 和 `transition.before["file:exchange"]`，value 写可见名称/路径/版本等事实。换文件名或对象但无解释的跳变会报缺口。相同文件名不证明内容相同；不要把预期输出当作实际输出。

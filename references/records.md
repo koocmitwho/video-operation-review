@@ -71,8 +71,10 @@
 
 | 字段 | 口径 |
 |---|---|
-| video_total_frames | 完整干净 ffprobe 索引得到的总数；不完整则 null |
+| video_total_frames | 完整干净 ffprobe 索引得到的可解码呈现帧总数；不完整则 null |
 | container_declared_frames | 容器声明，可为空或不准确 |
+| frame_count_basis | decoded_presentation_frames；frame_no 是该解码时间线的呈现顺序序号，不是容器的声明槽位编号 |
+| container_frame_count_mismatch | 索引完整且两种计数均已知时比较；不等为 true，相等为 false，无法比较为 null。差异会显示为警告，不能单独推断丢帧 |
 | computed_frames / computed_ranges | 实际有持久化完整差分记录的源帧及闭区间 |
 | candidate_requests / candidate_frames | 合并前请求源帧数 / 完全重复段合并后的代表数 |
 | candidates_reviewed_recorded / candidates_pending | 有完整原图查看登记的候选 / 待登记候选 |

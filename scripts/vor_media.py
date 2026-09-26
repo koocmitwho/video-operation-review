@@ -238,6 +238,7 @@ def scan(conn, work, video, ffmpeg='ffmpeg', ffprobe='ffprobe', tile_size=32,
     previous = previous_digest = None
     exact_start = 0
     state = 'complete'
+    total_frames = get_meta(conn, 'video_total_frames')
     try:
         with (work / log_rel).open('wb') as log:
             proc = decoder(source['path'], ffmpeg, log)
@@ -266,7 +267,9 @@ def scan(conn, work, video, ffmpeg='ffmpeg', ffprobe='ffprobe', tile_size=32,
                 if decoded % checkpoint == 0:
                     conn.execute('UPDATE attempts SET decoded_frames=?,new_frames=? WHERE id=?', (decoded, new, attempt))
                     conn.commit()
-                if max_new_frames is not None and new >= max_new_frames:
+                # At the indexed tail, consume EOF and check the real exit/log instead
+                # of killing a decoder that may still report a final error.
+                if max_new_frames is not None and new >= max_new_frames and decoded < total_frames:
                     state = 'paused_budget'
                     break
             if state == 'paused_budget':
@@ -302,7 +305,13 @@ def compact_select(numbers):
             spans[-1][1] = n
         else:
             spans.append([n, n])
-    return 'select=' + '+'.join(f'eq(n\\,{a})' if a == b else f'between(n\\,{a}\\,{b})' for a, b in spans)
+    terms = [f'eq(n\\,{a})' if a == b else f'between(n\\,{a}\\,{b})' for a, b in spans]
+    # FFmpeg's expression parser cannot handle a long left-deep sum. Pair terms
+    # into a balanced tree while keeping consecutive ranges compact.
+    while len(terms) > 1:
+        terms = [f'({terms[i]}+{terms[i + 1]})' if i + 1 < len(terms) else terms[i]
+                 for i in range(0, len(terms), 2)]
+    return 'select=' + (terms[0] if terms else '')
 
 
 def extract(conn, work, frames, ffmpeg='ffmpeg'):
@@ -334,8 +343,16 @@ def extract(conn, work, frames, ffmpeg='ffmpeg'):
             proc = decoder(source['path'], ffmpeg, log, filter_file, len(missing))
             for n in missing:
                 array = read_ppm(proc.stdout)
+                if array is None:
+                    # stdout reached EOF, so waiting cannot block on an unread
+                    # output pipe. Pixel mismatches take the kill/cleanup path.
+                    code = proc.wait()
+                    log.flush()
+                    if code or (work / log_rel).stat().st_size:
+                        raise RuntimeError(f'Extraction failed/degraded (exit {code}); see {log_rel}.')
+                    raise ValueError(f'Extraction ended before requested frame {n}; see {log_rel}.')
                 row = conn.execute('SELECT digest FROM frames WHERE frame_no=?', (n,)).fetchone()
-                if array is None or pixel_digest(array) != row[0]:
+                if pixel_digest(array) != row[0]:
                     raise ValueError(f'Extracted frame {n} does not match stored full-resolution pixel digest.')
                 ident = f'f{n:09d}'
                 relative = f'evidence/{ident}.png'

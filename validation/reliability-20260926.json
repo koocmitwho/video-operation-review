@@ -1,0 +1,75 @@
+{
+  "date": "2026-09-26",
+  "schema_version": 3,
+  "tests": [
+    {
+      "python": "3.12.10",
+      "passed": 97,
+      "seconds": 105.291,
+      "exit_code": 0
+    },
+    {
+      "python": "3.10.11",
+      "passed": 97,
+      "seconds": 171.876,
+      "exit_code": 0
+    }
+  ],
+  "parallel_test_runs": true,
+  "elapsed_times_are_not_interpreter_benchmarks": true,
+  "language_microbenchmark": {
+    "frames": 60000,
+    "cues": 1000,
+    "scope": "Local synthetic alignment only, not end-to-end video processing",
+    "cases": {
+      "monotonic": {
+        "seconds": 0.09130820000427775,
+        "warnings": [],
+        "frames": 60000,
+        "cues": 1000,
+        "alignment_sha256": "ec0e4284af3862907a9bb011066c6618edcb145e7e29afcebfff8522210165bf",
+        "before_seconds": 0.07873909999034368,
+        "speedup_this_run": 0.8623442361874922,
+        "same_cues_and_warnings": true
+      },
+      "duplicate_pts": {
+        "seconds": 0.09081930000684224,
+        "warnings": [
+          "non_increasing_frame_time"
+        ],
+        "frames": 60000,
+        "cues": 1000,
+        "alignment_sha256": "1a1cbcad299fe34f9fdeb1d15764f26aa5d715af8eaed26ef9703c1ea76d8f0c",
+        "before_seconds": 1.6946813999966253,
+        "speedup_this_run": 18.659925807278295,
+        "same_cues_and_warnings": true
+      },
+      "backward_pts": {
+        "seconds": 0.09180660001584329,
+        "warnings": [
+          "non_increasing_frame_time"
+        ],
+        "frames": 60000,
+        "cues": 1000,
+        "alignment_sha256": "1a1cbcad299fe34f9fdeb1d15764f26aa5d715af8eaed26ef9703c1ea76d8f0c",
+        "before_seconds": 1.70178709999891,
+        "speedup_this_run": 18.536653135016746,
+        "same_cues_and_warnings": true
+      }
+    }
+  },
+  "sparse_extraction": {
+    "requested_frames": 600,
+    "pixel_identity_verified": true,
+    "synthetic_video": true
+  },
+  "format_validation": "passed",
+  "ci_configuration": "added; remote execution not run",
+  "platforms_run": [
+    "Windows"
+  ],
+  "real_visual_review_this_update": false,
+  "semantic_completeness_proven": false,
+  "old_records_preserved": true,
+  "published_remote": false
+}

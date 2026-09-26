@@ -153,11 +153,15 @@ def status(conn):
                                'JOIN assets a ON a.id=v.asset_id WHERE a.kind="full" AND v.presentation="native"').fetchone()[0]
     index_clean = get_meta(conn, 'index_complete_clean', False)
     compute_clean = get_meta(conn, 'scan_complete_clean', False)
+    declared = get_meta(conn, 'declared_frames')
+    count_mismatch = (declared != total) if index_clean and total is not None and declared is not None else None
     attempts = [dict(r) for r in conn.execute('SELECT * FROM attempts ORDER BY id')]
     open_issues = [json.loads(r[0]) for r in conn.execute('SELECT payload FROM issues')
                    if json.loads(r[0]).get('status') != 'resolved']
     result = {
-        'video_total_frames': total, 'container_declared_frames': get_meta(conn, 'declared_frames'),
+        'video_total_frames': total, 'container_declared_frames': declared,
+        'frame_count_basis': 'decoded_presentation_frames',
+        'container_frame_count_mismatch': count_mismatch,
         'indexed_frames': indexed, 'computed_frames': computed,
         'computed_ranges': ranges(r[0] for r in conn.execute('SELECT frame_no FROM frames WHERE digest IS NOT NULL ORDER BY frame_no')),
         'unprocessed_ranges': ranges(r[0] for r in conn.execute('SELECT frame_no FROM frames WHERE digest IS NULL ORDER BY frame_no')),
@@ -489,6 +493,11 @@ def validate(conn, work, require_coverage=False, mode=None):
     s = status(conn)
     if not s['full_compute_complete']:
         warnings.append('Full-frame computation is not complete/clean; inspect attempts and missing ranges.')
+    if s['container_frame_count_mismatch']:
+        warnings.append(f"container_frame_count_mismatch: container declares {s['container_declared_frames']} frames; "
+                        f"the clean index contains {s['video_total_frames']} decoded presentation frames. "
+                        'Full-frame computation refers to this decoded timeline, not the container count. '
+                        'Inspect source packets/PTS before interpreting the discrepancy; no frames are synthesized.')
     if s['candidates_pending']:
         warnings.append(f"{s['candidates_pending']} candidate source frames have no view record.")
     warnings.append('Internal consistency only: self-reported tool references do not independently prove visual review.')
@@ -533,7 +542,9 @@ def export_records(conn, work):
     s = report['status']
     lines = ['# 软件操作录屏审阅', '', '此文档由已有记录生成；语义正确性和实际图片工具调用需要另行核实。', '',
              '| 统计 | 当前记录 |', '|---|---|',
-             f"| 视频总帧数 | {s['video_total_frames']}（未知时为 null/None） |",
+             f"| 容器声明帧数 | {s['container_declared_frames']} |",
+             f"| 已索引的可解码呈现帧数 | {s['video_total_frames']} |",
+             f"| 容器声明与解码计数不一致（null/None 表示尚不可比较） | {s['container_frame_count_mismatch']} |",
              f"| 程序计算检查 | {s['computed_frames']} |",
              f"| 粗审覆盖 / 精审覆盖（登记源帧范围长度） | {s['coarse_reviewed_frames_recorded']} / {s['fine_reviewed_frames_recorded']} |",
              f"| 已进行精审 / 已完成精审（区间帧数，非看图计数） | {s['fine_examined_frames_recorded']} / {s['fine_reviewed_frames_recorded']} |",
@@ -541,7 +552,7 @@ def export_records(conn, work):
              f"| 概览粒度去重源帧 | {s['recorded_overview_unique_frames']} |",
              f"| 候选帧 / 已登记查看 / 待查看 | {s['candidate_frames']} / {s['candidates_reviewed_recorded']} / {s['candidates_pending']} |",
              f"| 模型视觉查看去重源帧（按查看登记，非独立证明） | {s['recorded_visual_unique_frames']} |",
-             f"| 全帧计算完成 | {s['full_compute_complete']} |",
+             f"| 全帧计算完成（可解码呈现帧口径） | {s['full_compute_complete']} |",
              f"| 选定候选审阅完成（登记口径） | {s['selected_candidates_review_complete_recorded']} |",
              '| 全部帧逐张视觉审阅完成（独立核实） | 未核实 |', '',
              f"未计算范围：{dump(s['unprocessed_ranges'])}；未索引尾部：{dump(s['unindexed_tail'])}。", '',

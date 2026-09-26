@@ -94,7 +94,7 @@ class EvidenceAudit:
         self.conn = conn
         self.findings = []
         self.frames = {r['frame_no']: dict(r) for r in conn.execute(
-            'SELECT frame_no,time_s,exact_start,digest FROM frames ORDER BY frame_no')}
+            'SELECT frame_no,time_s,exact_start,digest,width,height FROM frames ORDER BY frame_no')}
         self.states = {r['frame_no']: dict(r) for r in conn.execute(
             'SELECT exact_start AS frame_no,MAX(frame_no) AS end_frame,MIN(time_s) AS start_time,'
             'MAX(time_s) AS end_time FROM frames WHERE digest IS NOT NULL GROUP BY exact_start ORDER BY exact_start')}
@@ -147,6 +147,69 @@ class EvidenceAudit:
             if (actor is None and self.native_viewers.get(ident)) or actor in self.native_viewers.get(ident, set()):
                 return True
         return False
+
+    def _asset_region(self, ident, ancestors=()):
+        """Resolve a crop chain into source-image coordinates; malformed chains fail closed."""
+        asset = self.assets.get(ident)
+        if not asset or ident in ancestors:
+            return None
+        frame = self.frames.get(asset['frame_no'])
+        if not frame or frame['digest'] is None:
+            return None
+        if asset['kind'] == 'full':
+            width, height = frame['width'], frame['height']
+            if asset['parent_id'] or type(width) is not int or type(height) is not int or min(width, height) <= 0:
+                return None
+            return (0, 0, width, height)
+        parent = self.assets.get(asset['parent_id'])
+        if asset['kind'] != 'crop' or not parent or parent['frame_no'] != asset['frame_no']:
+            return None
+        region = self._asset_region(parent['id'], (*ancestors, ident))
+        try:
+            box = json.loads(asset['crop'])
+        except (TypeError, ValueError):
+            return None
+        if region is None or not isinstance(box, list) or len(box) != 4 or any(type(n) is not int for n in box):
+            return None
+        x0, y0, x1, y1 = box
+        left, top, right, bottom = region
+        if not (0 <= x0 < x1 <= right-left and 0 <= y0 < y1 <= bottom-top):
+            return None
+        return (left+x0, top+y0, left+x1, top+y1)
+
+    def native_asset_covered(self, ident, refs, actor):
+        """Require the whole role region, allowing only exact consecutive source-state equivalents."""
+        target = self.assets.get(ident)
+        if not target:
+            return False
+        target_frame = self.frames.get(target['frame_no'])
+        region = self._asset_region(ident)
+        for ref in refs:
+            if actor not in self.native_viewers.get(ref, set()):
+                continue
+            if ref == ident:
+                return True
+            candidate = self.assets[ref]
+            frame = self.frames.get(candidate['frame_no'])
+            if not region or not target_frame or not frame or frame['digest'] is None or frame['exact_start'] != target_frame['exact_start']:
+                continue
+            covering = self._asset_region(ref)
+            if covering and covering[0] <= region[0] and covering[1] <= region[1] and covering[2] >= region[2] and covering[3] >= region[3]:
+                return True
+        return False
+
+    def review_trace_links(self, review):
+        """Check recorded actor/asset/hash/frame links, not the truth of tool-call attestations."""
+        evidence = set(review['evidence'])
+        actual_traces = set()
+        for view in self.views:
+            asset = self.assets.get(view['asset_id'])
+            if (asset and view['actor'] == review['reviewer'] and view['asset_id'] in evidence and
+                    view['asset_sha256'] == asset['sha256'] and view['frame_no'] == asset['frame_no'] and
+                    _nonempty(view['trace_ref']) and _nonempty(view['observation'])):
+                actual_traces.add(view['trace_ref'])
+        if not set(review['tool_trace_refs']) <= actual_traces:
+            self.finding('review_trace_unlinked', '复核调用引用未关联该复核者的有效证据查看登记。', stage='review')
 
     def account_states(self):
         accounted, missing, uncertain = [], [], []
@@ -265,6 +328,7 @@ class EvidenceAudit:
             unchecked = sorted(set(self.states) - set(review['checked_state_frames']))
             self.finding('review_scope_incomplete', '遗漏复核未明确覆盖全部不同连续画面状态。', unchecked, 'review')
         self.evidence(review['evidence'], review['id'], stage='review')
+        self.review_trace_links(review)
         reviewer_states = set()
         for ident in review['evidence']:
             asset = self.assets.get(ident)

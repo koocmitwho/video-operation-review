@@ -3,6 +3,7 @@ import json
 from contextlib import closing
 from pathlib import Path
 import sqlite3
+import struct
 import subprocess
 import sys
 import tempfile
@@ -84,6 +85,36 @@ class ReviewContract(unittest.TestCase):
             self.assertEqual(row['time_source'], 'pts')
         self.cli('focus', '--start', '5.03', '--end', '5.21', '--reason', 'check final setting')
         self.assertEqual([r['frame_no'] for r in self.rows('SELECT frame_no FROM candidates ORDER BY frame_no')], [1, 2])
+
+    def test_container_frame_count_mismatch_is_disclosed_without_inventing_frames(self):
+        # Model a real AVI discrepancy: container counts need not equal decoded pictures.
+        video = self.root / 'declared count differs.avi'
+        p = subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-i', str(self.cfr),
+                            '-an', '-c:v', 'rawvideo', '-pix_fmt', 'bgr24',
+                            '-fps_mode', 'passthrough', str(video)], capture_output=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        data = bytearray(video.read_bytes())
+        avih, strh = data.index(b'avih'), data.index(b'strh')
+        self.assertEqual(data[strh + 8:strh + 12], b'vids')
+        struct.pack_into('<I', data, avih + 8 + 16, 12)  # dwTotalFrames
+        struct.pack_into('<I', data, strh + 8 + 32, 12)  # video stream dwLength
+        video.write_bytes(data)
+        self.cli('scan', video)
+        result = self.cli('validate')
+        status = result['status']
+        self.assertEqual(status['container_declared_frames'], 12)
+        self.assertEqual(status['video_total_frames'], 8)
+        self.assertEqual(status['computed_ranges'], [[0, 7]])
+        self.assertTrue(status['full_compute_complete'])
+        self.assertTrue(result['valid'])  # Discrepancy alone does not establish decode failure.
+        self.assertTrue(any('container_frame_count_mismatch' in w for w in result['warnings']), result['warnings'])
+        self.assertEqual(status['frame_count_basis'], 'decoded_presentation_frames')
+        self.assertTrue(status['container_frame_count_mismatch'])
+        self.cli('export')
+        report = (self.work / 'report.md').read_text(encoding='utf-8')
+        self.assertIn('| 容器声明帧数 | 12 |', report)
+        self.assertIn('| 已索引的可解码呈现帧数 | 8 |', report)
+        self.assertIn('container_frame_count_mismatch', report)
 
     def test_pause_and_resume_preserve_ranges(self):
         self.scan('--max-new-frames', '3')

@@ -62,8 +62,46 @@ def _alignment(conn):
     return sorted(spans),warnings
 
 
+class _DisplayIntervalIndex:
+    """Query sorted display spans, including overlaps caused by irregular PTS.
+
+    Subtree maximum endpoints let a cue skip frames whose display has ended.
+    A zero-duration state is a point: include it at cue start but not cue end.
+    The endpoint's boolean distinguishes that inclusive point from a normal
+    display interval's exclusive end, without inventing a frame duration.
+    """
+
+    def __init__(self, spans):
+        self.spans = spans
+        self.starts = []
+        self.size = 1 << max(0, len(spans) - 1).bit_length()
+        self.max_ends = [(-math.inf, False)] * (2 * self.size)
+        for i, (start, stop, _) in enumerate(spans):
+            self.starts.append(start)
+            self.max_ends[self.size + i] = (stop, stop == start)
+        for node in range(self.size - 1, 0, -1):
+            self.max_ends[node] = max(self.max_ends[2 * node], self.max_ends[2 * node + 1])
+
+    def frames(self, begin, end):
+        limit = bisect_left(self.starts, end)
+        boundary = (begin, False)
+        members = []
+        pending = [(1, 0, self.size)]
+        while pending:
+            node, left, right = pending.pop()
+            if left >= limit or self.max_ends[node] <= boundary:
+                continue
+            if right - left == 1:
+                members.append(self.spans[left][2])
+                continue
+            middle = (left + right) // 2
+            pending.append((2 * node + 1, middle, right))
+            pending.append((2 * node, left, middle))
+        return sorted(set(members))
+
+
 def _store(conn,source,segments,offset,language,time_base,key):
-    spans,warnings=_alignment(conn); starts=[s[0] for s in spans]
+    spans,warnings=_alignment(conn); index=_DisplayIntervalIndex(spans)
     cues=[]; latest_end=None
     for i,s in enumerate(segments):
         begin=_number(s['start']); end=_number(s['end'])
@@ -73,9 +111,7 @@ def _store(conn,source,segments,offset,language,time_base,key):
         a,b=begin+offset,end+offset
         if latest_end is not None and a<latest_end: warnings.append('overlap')
         latest_end=max(latest_end or b,b)
-        lo=max(0,bisect_left(starts,a)-1); hi=bisect_left(starts,b)
-        candidates=spans[lo:hi] if 'non_increasing_frame_time' not in warnings else spans
-        members=sorted({n for t,stop,n in candidates if (t<b and stop>a) or (stop==t and a<=t<b)})
+        members=index.frames(a,b)
         if not members: warnings.append('outside_index')
         cues.append(dict(id=f'{key}:c{i+1}',original_start=begin,original_end=end,start_time=a,end_time=b,
                          text_original=s['text'],translation=s.get('translation'),language=s.get('language',language),
@@ -96,7 +132,10 @@ def _cached(conn,key):
 
 
 def _index_key(conn):
-    return canonical_hash([tuple(r) for r in conn.execute('SELECT frame_no,time_s,duration_time FROM frames ORDER BY frame_no')])
+    # Version 2 also covers long display intervals across unknown timestamps.
+    # Keep historical language records, but do not reuse predecessor-only results.
+    return canonical_hash({'alignment_version': 2, 'frames': [tuple(r) for r in conn.execute(
+        'SELECT frame_no,time_s,duration_time FROM frames ORDER BY frame_no')]})
 
 
 def import_subtitles(conn,work,path,offset=0.0,language='und',stream=0,ffmpeg='ffmpeg'):

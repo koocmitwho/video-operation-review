@@ -164,7 +164,7 @@ Viewing records still need to be checked against actual tool calls. Passing an a
 
 ## Validation
 
-The current **69 script tests pass**, covering the previous strict mode, layered intervals, evidence and review checks, cache recovery, VFR timing, and subtitle/transcript inputs. This includes 8 new tests for startup without dependencies, environment diagnosis, FFmpeg paths, and DeepSeek image-tool records. Once the dependencies are ready, run:
+On 2026-09-26, **all 97 script tests passed separately in both Windows environments, Python 3.10 and 3.12**. The suite preserves strict and layered workflows, host adaptation, and frame-count reporting fixes, and adds crop-region review, trace linkage, extraction of 600 sparse frames, end-of-budget completion, irregular timestamp alignment, and release-copy comparison. Once the dependencies are ready, run:
 
 ```text
 python -X utf8 -m unittest discover -s scripts/tests -v
@@ -172,8 +172,8 @@ python -X utf8 -m unittest discover -s scripts/tests -v
 
 In one trial using a 32-frame synthetic tutorial, the layered workflow displayed 18 distinct source frames, compared with 32 in strict mode. Both recorded all 9 predefined visible-state checkpoints, with 0 errors in the final parameter value.
 
-This update verified skill loading in both hosts on Windows and actual visual review using `deepseek-flash` in DeepSeek Harness. On another 32-frame synthetic recording, it completed full-frame indexing, image viewing, operation records, validation, and export. Its 55 successful image calls covered 32 original images, 22 crops, and one overview sheet; actual tool records were reconciled with evidence hashes. It correctly identified the cancelled value `0.73`, final value `0.04`, filename `measurements.csv`, and imported row count `13`. Record validation passed; missing click actions and file-identity evidence remain unresolved, and the full review gate did not pass. This update was not validated on macOS/Linux.
+On 2026-09-25, skill loading was verified in both hosts on Windows, along with actual visual review using `deepseek-flash` in DeepSeek Harness. On another 32-frame synthetic recording, it completed full-frame indexing, image viewing, operation records, validation, and export. Its 55 successful image calls covered 32 original images, 22 crops, and one overview sheet; actual tool records were reconciled with evidence hashes. It correctly identified the cancelled value `0.73`, final value `0.04`, filename `measurements.csv`, and imported row count `13`. Record validation passed; missing click actions and file-identity evidence remain unresolved, and the full review gate did not pass. This is a historical visual trial; the 2026-09-26 optimization checks use synthetic tests. The current update has not been run on macOS/Linux.
 
 See [Validation notes](references/validation.md) and the [host adaptation summary](validation/host-adaptation.json) for detailed results and limitations.
 
-Maintenance and acceptance criteria are documented in [Layered acceptance](references/layered-acceptance.md) and [Processing methods](references/method.md).
+Maintenance and acceptance criteria are documented in [Layered acceptance](references/layered-acceptance.md), [Processing methods](references/method.md), and [Development source and release checks](references/maintenance.md). Use `python scripts/check_release.py --target <release-directory>` for a read-only comparison; the new CI configuration must be assessed against actual results for the corresponding commit.

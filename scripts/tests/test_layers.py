@@ -282,6 +282,24 @@ class LayerContract(unittest.TestCase):
             reason='Rechecked new content',conclusion='clear',resolves=[])]})
         self.assertTrue(audit_omissions(self.conn,self.work)['records_ready_for_omission_review'])
 
+    def test_current_incomplete_sample_is_not_reported_as_stale_history(self):
+        layers=self.setup_interval(); self.clear_sample(layers)
+        item=self.interval(); item['reason']='Updated interpretation with unresolved visible ambiguity'
+        self.import_data({'intervals':[item]})
+        before={f['code'] for f in audit_omissions(self.conn,self.work)['findings']}
+        self.assertIn('interval_sample_stale',before)
+        req=layers.sample_requirements(self.conn,item); self.seen(req['frames'])
+        self.import_data({'interval_checks':[dict(id='C2',interval_id='I1',reviewer='fixture-author',
+            scope_hash=req['scope_hash'],method='risk_and_random',evidence=[f'f{n:09d}' for n in req['frames']],
+            reason='Current samples viewed but ambiguity remains',conclusion='incomplete',resolves=[])]})
+        audit=audit_omissions(self.conn,self.work)
+        codes={f['code'] for f in audit['findings']}
+        self.assertNotIn('interval_sample_stale',codes)
+        self.assertIn('interval_sample_incomplete',codes)
+        self.assertFalse(audit['records_ready_for_omission_review'])
+        self.assertFalse(audit['review_gate_passed_recorded'])
+        self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM interval_checks').fetchone()[0],2)
+
     def test_sparse_evidence_mapping_does_not_rescan_entire_long_index(self):
         layers=self.layers()
         with self.conn:
@@ -306,5 +324,100 @@ class LayerContract(unittest.TestCase):
         self.assertEqual(stats.get('fine_examined_frames_recorded'),32)
         self.assertEqual(stats['fine_reviewed_frames_recorded'],0)
         self.assertEqual(stats['recorded_visual_unique_frames'],3)
+
+    def role_review(self, role_asset, reviewer_asset, actor='fixture-reviewer'):
+        """Exercise the real gate; every view here is synthetic bookkeeping only."""
+        item=self.interval(); item.update(disposition='operation',step_ids=['S1'],fine_status='reviewed',merge='none')
+        step=self.step(); step['role_evidence']['during']=[role_asset]
+        if role_asset not in step['evidence']: step['evidence'].append(role_asset)
+        store.record_view(self.conn,self.work,role_asset,'fixture-author','view_image',
+                          'synthetic-test://author-role','Synthetic only; no actual image inspection.')
+        self.import_data({'intervals':[item],'steps':[step]})
+        before=audit_omissions(self.conn,self.work)
+        self.assertTrue(before['records_ready_for_omission_review'],before['findings'])
+        self.seen([0,31],actor)
+        store.record_view(self.conn,self.work,reviewer_asset,actor,'view_image',
+                          'synthetic-test://review-role','Synthetic only; no actual image inspection.')
+        self.import_data({'layer_reviews':[dict(id='R1',reviewer=actor,independence='independent',
+            snapshot=before['snapshot'],checked_interval_ids=['I1'],
+            evidence=['f000000000','f000000031',reviewer_asset],
+            tool_trace_refs=['synthetic-test://review-role'],issue_ids=[],
+            conclusion='no_additional_omissions_found',note='Synthetic bookkeeping only')]})
+        return audit_omissions(self.conn,self.work)
+
+    def test_reviewer_role_crop_requires_complete_region_coverage(self):
+        self.setup_interval(); self.seen([20])
+        target=media.crop(self.conn,self.work,'f000000020',(200,100,500,250))['asset_id']
+        cases=[('same',(200,100,500,250),True),('covering',(190,90,510,260),True),
+               ('full',None,True),('disjoint',(0,0,10,10),False),('partial',(200,100,499,250),False)]
+        for name,box,expected in cases:
+            with self.subTest(name=name):
+                candidate=media.crop(self.conn,self.work,'f000000020',box)['asset_id'] if box else 'f000000020'
+                result=self.role_review(target,candidate,'reviewer-'+name)
+                self.assertEqual(result['review_gate_passed_recorded'],expected,result['findings'])
+                self.assertEqual('reviewer_fine_view_missing' in {f['code'] for f in result['findings']},not expected)
+
+    def test_reviewer_crop_cannot_replace_full_role_image(self):
+        self.setup_interval(); self.seen([20])
+        crop=media.crop(self.conn,self.work,'f000000020',(200,100,500,250))['asset_id']
+        result=self.role_review('f000000020',crop)
+        self.assertFalse(result['review_gate_passed_recorded'])
+        self.assertIn('reviewer_fine_view_missing',{f['code'] for f in result['findings']})
+
+    def test_nested_role_crop_uses_source_absolute_coordinates(self):
+        from PIL import Image
+        self.setup_interval(); self.seen([20])
+        parent=media.crop(self.conn,self.work,'f000000020',(200,100,500,250))['asset_id']
+        # A schema-3 nested asset fixture; the public crop command stays unchanged.
+        parent_row,parent_path=store.require_asset(self.conn,self.work,parent)
+        nested='synthetic-nested-role'; relative='evidence/'+nested+'.png'
+        with Image.open(parent_path) as picture:
+            picture.crop((0,0,100,50)).save(self.work/relative)
+        with self.conn:
+            self.conn.execute('INSERT INTO assets VALUES (?,?,?,?,?,?,?,?)',
+                (nested,parent_row['frame_no'],'crop',relative,store.sha256(self.work/relative),
+                 parent,store.dump([0,0,100,50]),store.now()))
+        for name,box,expected in [('absolute',(190,90,310,160),True),('local-only',(0,0,100,50),False)]:
+            with self.subTest(name=name):
+                candidate=media.crop(self.conn,self.work,'f000000020',box)['asset_id']
+                result=self.role_review(nested,candidate,'nested-reviewer-'+name)
+                self.assertEqual(result['review_gate_passed_recorded'],expected,result['findings'])
+
+    def test_layer_review_trace_requires_valid_view_reference(self):
+        layers=self.setup_interval(); self.clear_sample(layers)
+        before=audit_omissions(self.conn,self.work)
+        frames=sorted({0,31,*layers.sample_requirements(self.conn,self.interval())['frames']})
+        self.seen(frames,'fixture-reviewer')
+        store.record_view(self.conn,self.work,'f000000000','fixture-reviewer','view_image',
+            'synthetic-test://invalid-hash','Synthetic invalid view reference fixture')
+        with self.conn:
+            self.conn.execute("UPDATE views SET asset_sha256='stale' WHERE trace_ref='synthetic-test://invalid-hash'")
+        self.import_data({'layer_reviews':[dict(id='R1',reviewer='fixture-reviewer',independence='independent',
+            snapshot=before['snapshot'],checked_interval_ids=['I1'],evidence=[f'f{n:09d}' for n in frames],
+            tool_trace_refs=['synthetic-test://invalid-hash'],issue_ids=[],
+            conclusion='no_additional_omissions_found',note='Synthetic bookkeeping only')]})
+        result=audit_omissions(self.conn,self.work)
+        self.assertIn('review_trace_unlinked',{f['code'] for f in result['findings']})
+
+    def test_role_region_substitution_preserves_exact_run_identity(self):
+        from vor_audit import EvidenceAudit
+        # Pure index/asset mapping fixture: no file inspection is claimed here.
+        with store.database(self.work/'region-map',create=True) as conn:
+            with conn:
+                conn.executemany('INSERT INTO frames(frame_no,time_source,digest,exact_start,width,height) VALUES (?,?,?,?,?,?)',
+                    [(0,'missing','same-rgb',0,640,360),(1,'missing','same-rgb',0,640,360),
+                     (2,'missing','different-rgb',2,640,360),(3,'missing','same-rgb',3,640,360)])
+                for n in range(4):
+                    conn.execute('INSERT INTO assets VALUES (?,?,?,?,?,?,?,?)',
+                        (f'full{n}',n,'full',f'{n}.png','synthetic-hash',None,None,store.now()))
+                    conn.execute('INSERT INTO assets VALUES (?,?,?,?,?,?,?,?)',
+                        (f'crop{n}',n,'crop',f'{n}-crop.png','synthetic-hash',f'full{n}',store.dump([200,100,500,250]),store.now()))
+                    conn.execute('INSERT INTO views(asset_id,frame_no,actor,tool,trace_ref,observation,asset_sha256,created) VALUES (?,?,?,?,?,?,?,?)',
+                        (f'crop{n}',n,'reviewer','view_image','synthetic-test://mapping','Synthetic only','synthetic-hash',store.now()))
+            audit=EvidenceAudit(conn)
+            self.assertTrue(audit.native_asset_covered('crop0',['crop1'],'reviewer'))
+            self.assertFalse(audit.native_asset_covered('crop0',['crop2'],'reviewer'))
+            self.assertFalse(audit.native_asset_covered('crop0',['crop3'],'reviewer'))
+            self.assertFalse(audit.native_asset_covered('full0',['crop1'],'reviewer'))
 
 if __name__ == '__main__': unittest.main()
