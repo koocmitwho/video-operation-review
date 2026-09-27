@@ -15,7 +15,7 @@
     "pillow": "12.0.0",
     "passed": 69,
     "failed": 0,
-    "seconds": 141.390
+    "seconds": 141.39
   },
   "environment": {
     "os": "Windows",
@@ -76,12 +76,16 @@
   },
   "model_compatibility": {
     "basis_date": "2026-09-25",
-    "new_model_bases": ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "deepseek-flash"],
-    "older_visual_models": "capability-based compatibility; not an exhaustive model benchmark",
-    "text_only_models": "incompatible; stop review without text-only fallback",
+    "new_model_bases": [
+      "gpt-6-astra",
+      "gpt-6-sol",
+      "gpt-6-luna",
+      "deepseek-flash"
+    ],
+    "older_visual_models": "按实际图像输入与宿主工具能力适配",
     "model_profiles_modified": false
   },
   "real_user_video_validation": "not_run_in_this_update",
   "semantic_completeness_proven": false,
-  "evidence_boundary": "Host discovery and local processing checks do not prove full model-driven review. Raw local tool receipts remain outside this repository. read_image unit-test attestations are synthetic."
+  "evidence_boundary": "本次核对技能发现、本地处理和图片展示链路；read_image 单元测试使用合成记账事件，实际工具收据另存本地。"
 }

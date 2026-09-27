@@ -1,4 +1,4 @@
-"""Compare a canonical skill tree with a release copy; never modifies either tree."""
+"""按 SHA-256 核对主目录与发布副本。"""
 import argparse
 import hashlib
 import json
@@ -32,7 +32,7 @@ def inventory(root):
             path = Path(directory) / name
             attributes = getattr(path.lstat(), 'st_file_attributes', 0)
             if path.is_symlink() or attributes & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0):
-                raise ValueError(f'Release directory links are not supported: {path}')
+                raise ValueError(f'请使用发布目录中的实体目录： {path}')
         for name in sorted(files):
             path = Path(directory) / name
             if name == '.git' or path.suffix in {'.pyc', '.pyo'}:

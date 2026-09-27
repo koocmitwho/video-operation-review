@@ -1,56 +1,59 @@
-# 分层记录与有界复核
+# 分层记录与复核
 
-本流程使用原始 0 起始帧号和闭区间；时间始终由索引 PTS 解析。`segments` 是程序建议，`intervals` 是宿主看图后形成的人工判断。两者分开，运行计划不会覆盖已审阅记录。
+源帧从 0 起始，区间采用闭区间，时间由原始 PTS 解析。segments 保存程序建议，intervals 保存实际看图后的人工判断。
 
 ## 命令次序
 
+从任意工作目录可运行；技能安装位置不同时修改 `$skillRoot`。视频与审阅目录使用本轮实际绝对路径。
+
 ```powershell
-$ReviewScript = (Resolve-Path './scripts/review_video.py').Path
-$ReviewWork = './work/tutorial'
-python -X utf8 $ReviewScript plan --work $ReviewWork
-python -X utf8 $ReviewScript candidates --work $ReviewWork
-python -X utf8 $ReviewScript extract --candidates --work $ReviewWork
-python -X utf8 $ReviewScript intervals --work $ReviewWork
+$skillRoot = Join-Path $env:USERPROFILE '.agents\skills\video-operation-review'
+$pythonExe = 'python'
+$reviewCli = Join-Path $skillRoot 'scripts\review_video.py'
+$VideoInput = 'D:\video-reviews\input\tutorial.mp4'
+$ReviewWork = 'D:\video-reviews\tutorial'
+& $pythonExe -X utf8 $reviewCli plan --work $ReviewWork --max-span 15
+& $pythonExe -X utf8 $reviewCli candidates --work $ReviewWork
+& $pythonExe -X utf8 $reviewCli extract --candidates --work $ReviewWork
+& $pythonExe -X utf8 $reviewCli intervals --work $ReviewWork
 ```
 
-`plan` 默认上下文上界 15 秒，是粗审分组时长而非跳帧间隔或完成上限。界面大变化/稳定段可提前分组；一帧菜单不会因为持续短就删除。弱局部变化和短暂状态仍保存在风险线索及逐帧数据库内。局部连续变化可以合成一个操作单元，但窗口/面板/对象/动作的语义仍由宿主看图判定。长等待中的鼠标/闪烁可能留在同一区间；没有算法证明它们全无关。
+`--max-span` 默认 15 秒，控制粗审分组上下文时长；界面变化和稳定段可提前分组。短暂状态与局部变化保存在原始索引和风险线索中。宿主实际看图后，按窗口、面板、对象与动作形成操作区间。
 
-`layer-plan.json` 保存建议区间及 `[区间内首帧, 区间内末帧, 原 exact_start]` 映射。`intervals` 返回人工区间的完整状态映射、原始时间与风险抽查需求。原始帧表从不因合并删除。首尾落在精确重复段中时，可以引用该段真正看过的代表；不同 RGB 状态不共享证据身份。
-
-实际查看代表画面后，用以下格式导入 `import-records`。这是格式示例，帧号、来源和观察均需换成当前视频的事实，不能直接用作查看证明。
+layer-plan.json 保存建议和 `[区间内首帧, 区间内末帧, 原 exact_start]` 映射；intervals 返回人工区间、原始时间和 sample_requirements。精确重复段可引用实际查看的代表图。以下 JSON 沿用字段格式，填写本轮帧号、观察和证据：
 
 ```json
 {
   "intervals": [{
     "id": "I01", "start_frame": 0, "end_frame": 15,
     "phase": "等待参数窗口", "disposition": "context",
-    "reason": "首尾窗口与对象一致；中间有鼠标/光标变化，按风险样本复核，未逐帧精审",
+    "reason": "首尾窗口与对象一致；中间有鼠标/光标变化，按风险样本复核，精审状态见 fine_status",
     "reviewer": "main", "merge": "approximate", "fine_status": "not_reviewed",
     "evidence": ["f000000000", "f000000015"], "step_ids": [], "issue_ids": []
   }]
 }
 ```
 
-所有源帧必须最终落在一段人工区间内，不能重叠；等待也有去向。`operation` 需要 step_ids；`uncertain` 需要 issue_ids 且保留未完成。`merge` 为 none/exact/approximate：不同状态合并必须明确 approximate（单个操作内部跨状态可为 none，因已有操作结构解释）。`fine_status` 为 not_reviewed/partial/reviewed。context 的全区间永远不因抽几个样本就算全区间精审。
+人工区间应完整、互斥地覆盖已计算时间线。operation 关联 step_ids，uncertain 关联 issue_ids；merge 取 none/exact/approximate，fine_status 取 not_reviewed/partial/reviewed。不同背景状态的组合使用 approximate，单个操作内跨状态可使用 none。
 
-拆分/合并时同次导入 `retire_intervals: ["旧ID"]` 和新 `intervals`，旧记录写入 history；旧异常抽查不会因退役被消除。不要编辑数据库抹掉未完成项。
+拆分/合并时同时导入 retire_intervals 和新 intervals。history 保留旧版本，既有异常继续关联原范围和后续复查。
 
 ## 原图、裁剪与拼图
 
-拼图可降低工具调用/概览上下文开销，但不是每个面板原图大小的精审：
+拼图用于多画面概览。以下代码沿用上面的路径变量：
 
 ```powershell
-python -X utf8 $ReviewScript sheet --work $ReviewWork --frames '0,15,16,18' --thumb-width 480 --columns 2
+& $pythonExe -X utf8 $reviewCli sheet --work $ReviewWork --frames '0,15,16,18' --thumb-width 480 --columns 2
 # 图片工具实际打开 sheet 返回的 absolute_path 后，写 observations.json：asset_id 到逐面板观察的对象。
-python -X utf8 $ReviewScript record-sheet-view --work $ReviewWork --sheet '实际 sheet ID' --actor main `
+& $pythonExe -X utf8 $reviewCli record-sheet-view --work $ReviewWork --sheet '实际 sheet ID' --actor main `
   --trace '实际工具调用位置' --observations './observations.json'
 ```
 
-只能登记工具实际显示且能够定位的面板。生成拼图不会登记查看；拼图登记是 overview，不能通过原图数值/抽查检查。重复打开、裁剪、拼图面板按源帧去重；native 表示原始证据图/裁剪已被工具展示，仍需实际使用 original 细节或合适裁剪确认可读性，不由脚本证明工具没有缩放。若文字不清楚，保留未知。
+按实际显示且可定位的面板填写 observations。拼图登记为 overview；原图或裁剪登记为 native。源帧全局去重，粒度分别记录。最终数值使用可读的原图或局部裁剪。
 
 ## 操作精审
 
-基本步骤字段见 [records.md](records.md)，前后状态结构见 [omission-review.md](omission-review.md) 中的 transition 示例；分层模式不需要逐状态 coverage。为每个操作另加：
+基本步骤字段见 [records.md](records.md)，transition 结构见 [omission-review.md](omission-review.md)。为每个操作补充作者与角色证据：
 
 ```json
 {
@@ -63,17 +66,15 @@ python -X utf8 $ReviewScript record-sheet-view --work $ReviewWork --sheet '实�
 }
 ```
 
-这些图必须位于该步骤帧范围内、顺序正确、均列入步骤顶层 evidence，且该作者实际查看了原图或裁剪。before/during/after 可以在素材只给静态状态时引用同帧，但必须说明证据限制，不能据此补出点击过程。确认/结果仍要在 transition 内 observed 或有理由的 not_applicable；未展示则 partial 加 issue。
+角色图位于步骤范围内，按 before/during/after 顺序排列，列入顶层 evidence，并有该作者的 native 登记。静态状态可共用一帧，note 说明可见过程。transition 的确认/结果取 observed 或有理由的 not_applicable；待核对步骤使用 partial 和 issue。
 
-独立复核也要覆盖角色证据的实际图像区域：可查看该资产本身、包含整个目标区域的裁剪或完整原图；同帧的无关小裁剪不能代替。嵌套裁剪按源图绝对区域核对，只允许同一连续精确重复段的画面等价，不把后来再次出现的相似画面算作已复核。
+独立复核查看该资产、覆盖目标区域的裁剪或完整原图。嵌套裁剪换算到源图区域；精确重复等价采用同一连续段。
 
-`final_parameters` 只写确认后的值；临时 0.20、取消、重输 0.02 应按可见过程区分。对话框消失本身不能证明 Apply；可见控件不存在可用 `{"visible": false}`，业务值未知才用 null。
+final_parameters 填写确认后的值，临时输入、取消、重输分开描述。控件消失可用 `{"visible": false}` 表示，待辨认的业务值用 null。文件交接采用同一 `file:exchange` 状态键，value 记录可见名称、路径和版本等事实。
 
-文件交接使用同一个稳定逻辑键，例如两个步骤的 `transition.after["file:exchange"]` 和 `transition.before["file:exchange"]`，value 写可见名称/路径/版本等事实。换文件名或对象但无解释的跳变会报缺口。相同文件名不证明内容相同；不要把预期输出当作实际输出。
+## 抽查与展开
 
-## 抽查和自适应展开
-
-先导入区间/步骤，再运行 `intervals` 取得 `sample_requirements`。approximate 或 context 区间要求抽查：最强局部变化、最弱非零局部变化、按内容哈希种子选的状态。相同帧去重；策略覆盖有限，不保证发现每次极小编辑。每个样本必须查看该状态的原图，不能仅凭 OCR 或拼图。
+导入区间/步骤后，运行 intervals 获取 sample_requirements。approximate/context 区间抽查最强局部变化、最弱非零变化和内容哈希种子样本，逐项查看原图。
 
 ```json
 {
@@ -87,11 +88,11 @@ python -X utf8 $ReviewScript record-sheet-view --work $ReviewWork --sheet '实�
 }
 ```
 
-`clear` 是本次有界抽查未发现异常，不是对所有帧无遗漏的证明。异常用 expand；信息不足用 incomplete。抽查 ID 不可原地覆盖；内容变更保留旧记录并导入新 ID。`audit --queue` 会把 expand 对应局部窗口内不同状态及邻接上下文入队。补充/修正操作后，用当前 scope_hash、method=exhaustive、全部该窗口状态的原图证据作新检查，`resolves` 指向原异常检查 ID。审计也要求被解决旧异常的原范围完整被新证据覆盖，不能把区间缩小来消警。
+clear 表示本次样本检查完成，expand 表示需要展开，incomplete 表示继续补查。每次检查使用新 ID 保留历史。audit --queue 将异常区间的不同状态和邻接帧加入候选；完成复查后，以当前 scope_hash、method=exhaustive 和原范围的全部状态证据登记新检查，resolves 关联原异常 ID。
 
 ## 当前内容的遗漏复核
 
-主稿和抽查就绪后，运行 `audit` 获取 snapshot。独立审阅者看完整区间序列的首尾代表、关键操作角色证据和抽查样本，再导入：
+主稿与抽查就绪后取得 audit.snapshot。复核者查看区间首尾、关键角色证据和抽查样本，再导入：
 
 ```json
 {
@@ -101,15 +102,15 @@ python -X utf8 $ReviewScript record-sheet-view --work $ReviewWork --sheet '实�
     "evidence": ["复核者实际看过的证据ID"],
     "tool_trace_refs": ["与复核者查看登记一致的实际调用位置"],
     "issue_ids": [], "conclusion": "no_additional_omissions_found",
-    "note": "说明检查范围、抽样边界和新发现，不能只写通过"
+    "note": "填写检查范围、样本与具体发现"
   }]
 }
 ```
 
-自审保留 self_review；门禁不会把自审当独立检查。步骤、区间、抽查或语言来源变更使 snapshot 失效。只追加查看记录不改变内容快照。`validate` 是记录一致性检查；`validate --require-coverage` 检查当前模式门禁；`export` 始终允许交付部分报告并保留缺口。
+自审使用 self_review。步骤、区间、抽查和语言来源变化后重新取得 snapshot 并复核；追加查看事件保留内容快照。validate 输出记录完整性 valid 与审阅完成度 review_complete；--require-coverage 将审阅完成条件加入退出状态。export 输出当前进度。
 
-统计区分 **已进行精审** `fine_examined_*` 与 **已完成精审** `fine_reviewed_*`：实际看过操作前/中/后的原图但仍缺菜单入口时，前者可计入，后者保持未完成。两者均是操作区间的覆盖长度，不是逐帧看图数。context 抽查不使整段等待变成已精审；真实查看数仍只取独立源帧去重登记并核对工具结果。
+fine_examined_* 表示已形成精审角色证据的操作区间，fine_reviewed_* 表示已完成精审的区间；二者均按区间长度统计。实际图片查看另按源帧去重，context 抽查保留自己的样本与粗审口径。
 
 ## 严格模式
 
-显式 `select --mode coverage` 保留每个连续不同 RGB 状态；`audit --mode strict` / `validate --mode strict --require-coverage` 按旧覆盖和独立复核规则检查。用于疑难片段/独立严格工作目录、穷尽验收或回归基线，不作为普通分层任务的隐性要求。分层里的异常展开使用同一精确状态索引，无需重算原视频。
+`select --mode coverage` 保留所有连续不同 RGB 状态；`audit --mode strict` 和 `validate --mode strict --require-coverage` 执行逐状态规则，适用于疑难片段、穷尽验收和回归。分层局部展开复用同一精确状态索引。

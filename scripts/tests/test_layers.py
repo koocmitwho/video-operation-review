@@ -196,6 +196,31 @@ class LayerContract(unittest.TestCase):
         item=self.interval(); item['phase']='changed annotation'; self.import_data({'intervals':[item]})
         self.assertEqual(audit_omissions(self.conn,self.work)['omission_review']['status'],'stale')
 
+    def test_review_complete_requires_candidates_and_current_gate(self):
+        layers = self.setup_interval()
+        self.clear_sample(layers)
+        candidates = [r[0] for r in self.conn.execute('SELECT frame_no FROM candidates')]
+        self.seen(candidates)
+        incomplete = store.validate(self.conn, self.work)
+        self.assertTrue(incomplete['valid'])
+        self.assertIn('review_complete', incomplete)
+        self.assertFalse(incomplete['review_complete'])
+        audit = audit_omissions(self.conn, self.work)
+        frames = sorted({0, 31, *layers.sample_requirements(self.conn, self.interval())['frames']})
+        self.seen(frames, actor='fixture-reviewer')
+        self.import_data({'layer_reviews': [dict(
+            id='R1', reviewer='fixture-reviewer', independence='independent', snapshot=audit['snapshot'],
+            checked_interval_ids=['I1'], evidence=[f'f{n:09d}' for n in frames],
+            tool_trace_refs=['synthetic-test://not-real-view'], issue_ids=[],
+            conclusion='no_additional_omissions_found', note='合成记账用例')]})
+        self.assertTrue(store.validate(self.conn, self.work)['review_complete'])
+        self.assertTrue(store.validate(self.conn, self.work, require_coverage=True)['valid'])
+        self.assertTrue(store.export_records(self.conn, self.work)['review_complete'])
+        changed = self.interval()
+        changed['phase'] = 'updated phase'
+        self.import_data({'intervals': [changed]})
+        self.assertFalse(store.validate(self.conn, self.work)['review_complete'])
+
     def test_sample_cannot_be_filled_with_unrelated_or_overview_only_assets(self):
         layers=self.setup_interval()
         req=layers.sample_requirements(self.conn,self.interval())
@@ -240,7 +265,7 @@ class LayerContract(unittest.TestCase):
     def test_public_cli_exposes_layer_plan_mapping_and_language_tracks(self):
         cli=Path(__file__).resolve().parents[1]/'review_video.py'
         for args in [('plan',),('intervals',),('tracks',)]:
-            p=subprocess.run([sys.executable,str(cli),*args,'--work',str(self.work)],capture_output=True,text=True,encoding='utf-8')
+            p=subprocess.run([sys.executable,'-X','utf8',str(cli),*args,'--work',str(self.work)],capture_output=True,text=True,encoding='utf-8')
             self.assertEqual(p.returncode,0,p.stdout+p.stderr)
             self.assertIsInstance(json.loads(p.stdout),dict)
         self.assertTrue((self.work/'layer-plan.json').exists())

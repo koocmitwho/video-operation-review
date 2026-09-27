@@ -1,6 +1,6 @@
 {
   "date": "2026-09-26",
-  "scope": "CI compatibility follow-up; no new real-video semantic validation",
+  "scope": "FFmpeg 滤镜文件接口与 Windows 路径的 CI 兼容修复",
   "schema_version": 3,
   "local_platform": "Windows",
   "local_ffmpeg": "8.1.2",

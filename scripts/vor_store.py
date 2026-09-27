@@ -1,8 +1,9 @@
-"""Durable review bookkeeping. Consistency checks are not proof of visual attention."""
+"""持久化审阅记录、证据完整性与完成度。"""
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import sqlite3
 
@@ -23,6 +24,64 @@ def sha256(path):
         for chunk in iter(lambda: f.read(1024 * 1024), b''):
             h.update(chunk)
     return h.hexdigest()
+
+
+def file_signature(path):
+    """文件属性用于复用已计算的内容哈希；Windows 另取文件变更时间。"""
+    with Path(path).open('rb') as stream:
+        stat = os.fstat(stream.fileno())
+        signature = dict(size=stat.st_size, mtime_ns=stat.st_mtime_ns,
+                         ctime_ns=stat.st_ctime_ns, device=stat.st_dev, inode=stat.st_ino)
+        if os.name == 'nt':
+            import ctypes
+            from ctypes import wintypes
+            import msvcrt
+            class FileBasicInfo(ctypes.Structure):
+                _fields_ = [(name, ctypes.c_longlong) for name in
+                            ('creation', 'access', 'write', 'change')] + [('attributes', wintypes.DWORD)]
+            info = FileBasicInfo()
+            query = ctypes.WinDLL('kernel32', use_last_error=True).GetFileInformationByHandleEx
+            query.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
+            query.restype = wintypes.BOOL
+            if not query(msvcrt.get_osfhandle(stream.fileno()), 0, ctypes.byref(info), ctypes.sizeof(info)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            signature['change_time'] = info.change
+    return signature
+
+
+def source_file_identity(video, cache=None, force_hash=False):
+    path = Path(video).resolve(strict=True)
+    signature = file_signature(path)
+    reused = (not force_hash and cache and cache.get('path') == str(path)
+              and cache.get('signature') == signature and cache.get('sha256'))
+    digest = cache['sha256'] if reused else sha256(path)
+    if not reused and file_signature(path) != signature:
+        raise ValueError('源文件在校验过程中发生变化，请待文件写入结束后重试。')
+    source = dict(path=str(path), size=signature['size'], sha256=digest)
+    proof = dict(source, signature=signature)
+    return source, proof, not bool(reused)
+
+
+def verify_source(conn, force_hash=False):
+    expected = get_meta(conn, 'source') or {}
+    result = dict(path=expected.get('path'), expected_sha256=expected.get('sha256'),
+                  sha256=None, rehashed=False, method='unavailable', valid=False)
+    if not expected.get('path'):
+        return dict(result, code='source_missing', message='源视频路径缺失，请检查 source 元数据。')
+    try:
+        source, cache, rehashed = source_file_identity(
+            expected['path'], get_meta(conn, 'source_hash_cache'), force_hash)
+    except (FileNotFoundError, NotADirectoryError, IsADirectoryError):
+        return dict(result, code='source_missing', message='源视频文件缺失，请恢复 source 中记录的路径。')
+    except (OSError, ValueError) as exc:
+        return dict(result, code='source_unreadable', message=str(exc))
+    with conn:
+        set_meta(conn, 'source_hash_cache', cache)
+    result.update(sha256=source['sha256'], rehashed=rehashed,
+                  method='sha256_recomputed' if rehashed else 'cached_sha256_stat_match')
+    if source['sha256'] != expected.get('sha256'):
+        return dict(result, code='source_hash_mismatch', message='源视频 SHA-256 与扫描时记录不一致。')
+    return dict(result, valid=True)
 
 
 def connect(work, create=False):
@@ -184,7 +243,7 @@ def status(conn):
         'independently_verified_visual_frames': None,
         'all_frames_visual_review_complete_recorded': bool(total and full_viewed == total),
         'all_frames_visual_review_complete_verified': False,
-        'visual_assurance': 'Attested records with tool references; actual image tool calls must be audited separately.',
+        'visual_assurance': '查看登记关联图片工具引用；交付时核对宿主工具结果。',
         'candidate_pending_ranges': ranges(r[0] for r in conn.execute(
             'SELECT frame_no FROM candidates c WHERE NOT EXISTS '
             '(SELECT 1 FROM views v JOIN assets a ON a.id=v.asset_id '
@@ -192,7 +251,7 @@ def status(conn):
         'unresolved_issues': open_issues, 'attempts': attempts,
         'timestamp_anomalies': get_meta(conn, 'timestamp_anomalies', {}),
         'near_duplicate_merging': False,
-        'risk': 'Change thresholds can miss small or low-contrast actions. Exact-run coverage is not per-frame visual review.'
+        'risk': '变化指标提供候选线索，关键操作通过原图、局部裁剪与前后状态核对。'
     }
     from vor_layers import coverage_counts
     result.update(coverage_counts(conn))
@@ -221,6 +280,8 @@ def rebuild_candidates(conn):
 def select_candidates(conn, anchor_seconds=5.0, global_threshold=2.0, local_threshold=0.8,
                       min_changed_pixels=8, context_frames=1, mode='layered'):
     if mode == 'layered':
+        if (anchor_seconds, global_threshold, local_threshold, min_changed_pixels, context_frames) != (5.0, 2.0, 0.8, 8, 1):
+            raise ValueError('分层模式使用 plan 的分段参数；这些阈值参数请用于 --mode coverage（穷尽逐状态）或 --mode changes。')
         from vor_layers import prepare
         prepare(conn)
         return status(conn)
@@ -331,10 +392,15 @@ def require_asset(conn, work, asset_id):
 
 def record_view(conn, work, asset_id, actor, tool, trace, observation):
     if tool not in {'view_image', 'read_image', 'image_tool', 'visible_attachment'}:
-        raise ValueError('Only actual image viewing qualifies; OCR, diff, export and file listing do not.')
+        raise ValueError('tool 请使用 view_image、read_image、image_tool 或 visible_attachment。')
     if not all(s.strip() for s in [actor, trace, observation]):
         raise ValueError('Actor, actual tool-call reference and visual observation are required.')
-    asset, _ = require_asset(conn, work, asset_id)
+    asset, path = require_asset(conn, work, asset_id)
+    reference = trace.strip()
+    image_name = reference.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'))
+    bare_name = len(reference) < 40 and not any(s in reference for s in ('://', '#', ':', '/', '\\', ' '))
+    if image_name or bare_name or reference in {asset_id, asset['path'], str(path)}:
+        raise ValueError('请填写图片调用或消息引用，例如 read_image#msg-42、session://abc/step-7。')
     with conn:
         conn.execute('INSERT INTO views(asset_id,frame_no,actor,tool,trace_ref,observation,asset_sha256,created) '
                      'VALUES (?,?,?,?,?,?,?,?)',
@@ -383,7 +449,7 @@ def check_step(step):
         except ValueError as exc:
             errors.append(str(exc))
     if step['status'] == 'confirmed' and step['uncertainties']:
-        errors.append('A confirmed step cannot retain uncertainties; use partial')
+        errors.append('含待核对项的步骤请使用 partial 状态')
     return errors
 
 
@@ -425,10 +491,13 @@ def import_records(conn, path):
     return status(conn)
 
 
-def validate(conn, work, require_coverage=False, mode=None):
+def validate(conn, work, require_coverage=False, mode=None, force_source_hash=False, *, _include_review=True):
     errors, warnings = [], []
     def err(code, ref, message):
         errors.append({'code': code, 'reference': ref, 'message': message})
+    source_verification = verify_source(conn, force_source_hash)
+    if not source_verification['valid']:
+        err(source_verification['code'], 'source', source_verification['message'])
     assets = {r['id']: dict(r) for r in conn.execute('SELECT * FROM assets')}
     for ident, asset in assets.items():
         try:
@@ -492,36 +561,42 @@ def validate(conn, work, require_coverage=False, mode=None):
                 err('unreviewed_evidence', row['id'], ident)
     s = status(conn)
     if not s['full_compute_complete']:
-        warnings.append('Full-frame computation is not complete/clean; inspect attempts and missing ranges.')
+        warnings.append('全帧计算待完成；请查看 attempts 和后续范围。')
     if s['container_frame_count_mismatch']:
-        warnings.append(f"container_frame_count_mismatch: container declares {s['container_declared_frames']} frames; "
-                        f"the clean index contains {s['video_total_frames']} decoded presentation frames. "
-                        'Full-frame computation refers to this decoded timeline, not the container count. '
-                        'Inspect source packets/PTS before interpreting the discrepancy; no frames are synthesized.')
+        warnings.append(f"container_frame_count_mismatch: 容器声明 {s['container_declared_frames']} 帧；"
+                        f"完整索引包含 {s['video_total_frames']} 个可解码呈现帧。请核对源包、PTS 与日志。")
     if s['candidates_pending']:
-        warnings.append(f"{s['candidates_pending']} candidate source frames have no view record.")
-    warnings.append('Internal consistency only: self-reported tool references do not independently prove visual review.')
+        warnings.append(f"待查看候选源帧：{s['candidates_pending']}。")
     result = {'valid': not errors, 'errors': errors, 'warnings': warnings,
-              'assurance': 'record_consistency_only', 'status': s}
-    if require_coverage:
+              'assurance': 'record_consistency_only', 'status': s,
+              'source_verification': source_verification}
+    if _include_review or require_coverage:
         from vor_audit import audit_omissions
         audit = audit_omissions(conn, work, base_validation=result, mode=mode)
-        result['coverage_audit'] = audit
-        if not audit['review_gate_passed_recorded']:
+        result['review_complete'] = bool(result['valid'] and s['full_compute_complete']
+                                         and s['selected_candidates_review_complete_recorded']
+                                         and audit['review_gate_passed_recorded'])
+        if require_coverage:
+            result['coverage_audit'] = audit
+        if require_coverage and not result['review_complete']:
             result['errors'].append({'code': 'omission_gate_incomplete', 'reference': 'coverage_audit',
-                                     'message': 'State accounting, continuity or current independent review is incomplete.'})
+                                     'message': '请完成候选查看、状态衔接及当前内容的复核。'})
             result['valid'] = False
     return result
 
 
-def export_records(conn, work):
+def export_records(conn, work, force_source_hash=False):
     from vor_audit import audit_omissions
     work = Path(work).resolve()
     report = {'schema_version': SCHEMA_VERSION,
               'source': get_meta(conn, 'source'), 'media': get_meta(conn, 'media'),
               'scan_config': get_meta(conn, 'scan_config'), 'selection_config': get_meta(conn, 'selection_config'),
-              'status': status(conn), 'validation': validate(conn, work)}
+              'status': status(conn), 'validation': validate(conn, work, force_source_hash=force_source_hash,
+                                                            _include_review=False)}
     report['coverage_audit'] = audit_omissions(conn, work, base_validation=report['validation'])
+    s = report['status']
+    report['validation']['review_complete'] = bool(report['validation']['valid'] and s['full_compute_complete']
+        and s['selected_candidates_review_complete_recorded'] and report['coverage_audit']['review_gate_passed_recorded'])
     for table in ['candidates', 'assets', 'views', 'steps', 'issues', 'coverage', 'omission_reviews', 'history',
                   'segments', 'intervals', 'interval_checks', 'layer_reviews', 'sheets', 'language_sources']:
         report[table] = [dict(r) for r in conn.execute(f'SELECT * FROM {table}')]
@@ -540,23 +615,23 @@ def export_records(conn, work):
             f.write(dump(entry) + '\n')
     temp.replace(work / 'frames.jsonl')
     s = report['status']
-    lines = ['# 软件操作录屏审阅', '', '此文档由已有记录生成；语义正确性和实际图片工具调用需要另行核实。', '',
+    lines = ['# 软件操作录屏审阅', '', '本报告汇总操作记录、画面证据、查看登记和当前审阅进度。', '',
              '| 统计 | 当前记录 |', '|---|---|',
              f"| 容器声明帧数 | {s['container_declared_frames']} |",
              f"| 已索引的可解码呈现帧数 | {s['video_total_frames']} |",
              f"| 容器声明与解码计数不一致（null/None 表示尚不可比较） | {s['container_frame_count_mismatch']} |",
              f"| 程序计算检查 | {s['computed_frames']} |",
              f"| 粗审覆盖 / 精审覆盖（登记源帧范围长度） | {s['coarse_reviewed_frames_recorded']} / {s['fine_reviewed_frames_recorded']} |",
-             f"| 已进行精审 / 已完成精审（区间帧数，非看图计数） | {s['fine_examined_frames_recorded']} / {s['fine_reviewed_frames_recorded']} |",
-             f"| 候选操作单元（不是实际操作总数） | {s['candidate_operation_units']} |",
+             f"| 已进行精审 / 已完成精审（区间帧数） | {s['fine_examined_frames_recorded']} / {s['fine_reviewed_frames_recorded']} |",
+             f"| 候选操作单元 | {s['candidate_operation_units']} |",
              f"| 概览粒度去重源帧 | {s['recorded_overview_unique_frames']} |",
              f"| 候选帧 / 已登记查看 / 待查看 | {s['candidate_frames']} / {s['candidates_reviewed_recorded']} / {s['candidates_pending']} |",
-             f"| 模型视觉查看去重源帧（按查看登记，非独立证明） | {s['recorded_visual_unique_frames']} |",
+             f"| 模型视觉查看去重源帧（登记口径） | {s['recorded_visual_unique_frames']} |",
              f"| 全帧计算完成（可解码呈现帧口径） | {s['full_compute_complete']} |",
              f"| 选定候选审阅完成（登记口径） | {s['selected_candidates_review_complete_recorded']} |",
              '| 全部帧逐张视觉审阅完成（独立核实） | 未核实 |', '',
              f"未计算范围：{dump(s['unprocessed_ranges'])}；未索引尾部：{dump(s['unindexed_tail'])}。", '',
-             f"尚无全图查看登记的源帧：{dump(s['source_frames_without_full_view_record_ranges'])}。精确重复段由代表图覆盖也不计为逐张查看。", '',
+             f"待补充全图查看登记的源帧：{dump(s['source_frames_without_full_view_record_ranges'])}。", '',
              '## 操作步骤', '']
     for item in report['steps']:
         step = item['payload']
@@ -584,7 +659,7 @@ def export_records(conn, work):
         lines += ['', '## 分层覆盖', '',
                   f"尚未粗审范围：{dump(s['not_coarse_reviewed_ranges'])}；尚未进行精审：{dump(s['not_fine_examined_ranges'])}；尚未完成精审：{dump(s['not_fine_reviewed_ranges'])}。", '',
                   f"复核状态：{audit['omission_review']['status']}；记录层检查通过：{audit['review_gate_passed_recorded']}。", '',
-                  '区间、原始帧/状态映射、合并理由、抽查与字幕线索保存在 review.json；均不自动增加实际看图数。', '']
+                  '区间、原始帧/状态映射、合并理由、抽查与字幕线索保存在 review.json；查看数量来自图片调用登记。', '']
         for item in report['intervals']:
             entry = item['payload']
             lines.append(f"- {entry['id']} 帧 {entry['start_frame']}–{entry['end_frame']}：{entry['phase']}；{entry['disposition']}；{entry['merge']}；精审 {entry['fine_status']}；{entry['reason']}")
@@ -592,21 +667,23 @@ def export_records(conn, work):
         lines += ['', '## 操作遗漏检查', '',
               f"不同连续画面状态：{audit['coverage']['state_count']}；有依据的状态说明：{len(audit['coverage']['accounted_state_frames'])}。", '',
               f"可进入遗漏复核：{audit['records_ready_for_omission_review']}；复核状态：{audit['omission_review']['status']}。", '',
-              f"记录层遗漏检查通过：{audit['review_gate_passed_recorded']}。程序不能据此证明操作语义完整。", '',
+              f"记录层遗漏检查通过：{audit['review_gate_passed_recorded']}。", '',
                   f"未说明状态的代表帧：{dump(audit['coverage']['unaccounted_state_frames'])}。", '']
-    lines += [f"- {f['code']}：{f['message']}（建议复查帧 {dump(f['suggested_frames'])}）" for f in audit['findings']] or ['- 没有发现记录层缺口；仍须保留证据边界。']
+    lines += [f"- {f['code']}：{f['message']}（建议复查帧 {dump(f['suggested_frames'])}）" for f in audit['findings']] or ['- 当前记录检查就绪。']
     result = report['validation']
-    lines += ['', '## 记录校验', '',
-              f"记录一致性校验：{'通过' if result['valid'] else '未通过'}。此项不独立证明实际视觉查看或步骤语义正确。", '',
+    lines += ['', '## 记录校验与审阅完成度', '',
+              f"记录完整性：{'通过' if result['valid'] else '待修复'}（源文件、证据哈希与引用）。", '',
+              f"审阅完成度：{'已完成' if result['review_complete'] else '待完成'}（候选查看及当前模式复核门禁）。", '',
+              f"源身份检查：{result['source_verification']['method']}；本次重新哈希：{result['source_verification']['rehashed']}。", '',
               '错误：', '']
     lines += [f"- {e['code']} · {e['reference']}：{e['message']}" for e in result['errors']] or ['- 无。']
     lines += ['', '警告：', '']
     lines += [f'- {warning}' for warning in result['warnings']] or ['- 无。']
-    lines += ['', '差分可能漏掉操作。相同画面合并代表的帧没有逐张被视觉查看。生成图片、OCR、差分和文件列表均不增加查看计数。']
     atomic_text(work / 'report.md', '\n'.join(lines) + '\n')
     return {'review_json': str(work / 'review.json'), 'frames_jsonl': str(work / 'frames.jsonl'),
             'report': str(work / 'report.md'), 'omission_audit': str(work / 'omission-audit.json'),
             'validation_passed': report['validation']['valid'],
+            'review_complete': report['validation']['review_complete'],
             'omission_gate_passed_recorded': audit['review_gate_passed_recorded']}
 
 

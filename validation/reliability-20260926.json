@@ -20,7 +20,7 @@
   "language_microbenchmark": {
     "frames": 60000,
     "cues": 1000,
-    "scope": "Local synthetic alignment only, not end-to-end video processing",
+    "scope": "本地合成字幕对齐微基准",
     "cases": {
       "monotonic": {
         "seconds": 0.09130820000427775,

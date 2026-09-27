@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local full-frame scan and evidence ledger. Run --help; no model API is called."""
+"""本地视频全帧索引、分层审阅与证据记录。使用 --help 查看命令。"""
 import argparse
 import json
 import os
@@ -13,33 +13,33 @@ from vor_store import (candidate_manifest, database, dump, export_records, focus
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     commands = p.add_subparsers(dest='command', required=True)
-    doctor = commands.add_parser('doctor', help='Check local dependencies without creating a review or testing host vision.')
+    doctor = commands.add_parser('doctor', help='检查本地 Python、图像库及 FFmpeg 环境。')
     doctor.add_argument('--ffmpeg', default=os.environ.get('VOR_FFMPEG') or 'ffmpeg')
     doctor.add_argument('--ffprobe', default=os.environ.get('VOR_FFPROBE') or 'ffprobe')
     subs = {}
     for name, help_text in {
-        'scan': 'Index original timestamps and stream every RGB frame, or resume.',
-        'select': 'Choose candidates from stored metrics; no visual review is implied.',
-        'plan': 'Prepare full-timeline change clusters and representative overview frames.',
-        'intervals': 'List authored interval mappings, sample requirements and language clues.',
-        'sheet': 'Compose extracted frames as an overview sheet; does not record viewing.',
-        'record-sheet-view': 'Record ACTUALLY displayed panels with overview granularity.',
-        'tracks': 'Inspect local audio and subtitle tracks; no ASR is started.',
-        'subtitles': 'Decode SRT/VTT/embedded text subtitles with FFmpeg and align to original PTS.',
-        'transcript': 'Import explicit-time-base ASR JSON, preserving original text and translation.',
-        'candidates': 'List candidate times, reasons, image paths and pending state by phase.',
-        'focus': 'Add candidates for a specific gap using ORIGINAL timestamp seconds.',
-        'extract': 'Export requested evidence PNGs with source-pixel hash checks.',
-        'crop': 'Crop evidence without creating a new source-frame identity.',
-        'record-view': 'Attest to an ACTUAL image tool call; cannot independently prove it.',
-        'import-records': 'Merge structured operation steps/issues by ID; preserve history.',
-        'status': 'Report computed, selected, recorded-viewed and unknown ranges separately.',
-        'validate': 'Check references/hashes only; not proof of visual review.',
-        'audit': 'Check interval/strict coverage, operations, discontinuities and bounded review validity.',
-        'export': 'Reuse records to write review.json, frames.jsonl and report.md.'
+        'scan': '索引原始时间戳，流式计算全部 RGB 帧，支持恢复。',
+        'select': '根据已有指标选择候选画面。',
+        'plan': '生成全时间线变化簇与代表画面。',
+        'intervals': '列出人工区间映射、抽查需求和语言线索。',
+        'sheet': '将已抽取的证据组成概览拼图。',
+        'record-sheet-view': '按 overview 粒度登记实际展示的面板。',
+        'tracks': '查询本地音轨与字幕轨。',
+        'subtitles': '解析 SRT/VTT/内嵌文本字幕，并按原始 PTS 对齐。',
+        'transcript': '导入带时间基准的转写 JSON，保留原文和译文。',
+        'candidates': '列出候选时间、原因、路径和阶段进度。',
+        'focus': '按原始时间秒数为具体疑点追加候选。',
+        'extract': '抽取证据 PNG，并核对源像素哈希。',
+        'crop': '裁剪证据并保留源帧身份。',
+        'record-view': '登记图片工具调用引用与视觉观察。',
+        'import-records': '按 ID 导入步骤与疑点，保存历史。',
+        'status': '分别报告计算、候选、查看登记和后续范围。',
+        'validate': '检查源文件与记录完整性，报告审阅完成度。',
+        'audit': '检查分层/严格覆盖、操作衔接、抽查与复核。',
+        'export': '从当前记录生成 JSON、逐帧数据和报告。'
     }.items():
         subs[name] = commands.add_parser(name, help=help_text)
-        subs[name].add_argument('--work', required=True, type=Path, help='Dedicated review directory, one source video.')
+        subs[name].add_argument('--work', required=True, type=Path, help='本视频专用的审阅目录。')
     s = subs['scan']
     s.add_argument('video', type=Path)
     s.add_argument('--ffmpeg', default=os.environ.get('VOR_FFMPEG') or 'ffmpeg')
@@ -47,16 +47,16 @@ def parser():
     s.add_argument('--tile-size', type=int, default=32)
     s.add_argument('--pixel-threshold', type=int, default=8)
     s.add_argument('--checkpoint-frames', type=int, default=100)
-    s.add_argument('--max-new-frames', type=int, help='Optional explicit compute budget, never a completion ceiling.')
+    s.add_argument('--max-new-frames', type=int, help='本次新增计算帧预算，达到后保存进度。')
     s = subs['select']
     s.add_argument('--mode', choices=['layered', 'coverage', 'changes'], default='layered',
-                   help='layered proposes overview clusters; explicit coverage is exhaustive RGB-state mode.')
+                   help='layered 生成概览分组，coverage 保留全部连续 RGB 状态。')
     s.add_argument('--anchor-seconds', type=float, default=5.0)
     s.add_argument('--global-threshold', type=float, default=2.0)
     s.add_argument('--local-threshold', type=float, default=0.8)
     s.add_argument('--min-changed-pixels', type=int, default=8)
     s.add_argument('--context-frames', type=int, default=1)
-    s.add_argument('--pixel-threshold', type=int, help='Must equal scan threshold; change scan parameters in a new work directory.')
+    s.add_argument('--pixel-threshold', type=int, help='与扫描阈值一致；新扫描参数使用新审阅目录。')
     s = subs['candidates']
     s.add_argument('--pending', action='store_true')
     s.add_argument('--start', type=float)
@@ -69,19 +69,19 @@ def parser():
     s = subs['extract']
     group = s.add_mutually_exclusive_group(required=True)
     group.add_argument('--candidates', action='store_true')
-    group.add_argument('--frames', help='Comma-separated original 0-based frame ordinals.')
+    group.add_argument('--frames', help='原始 0 起始帧号，逗号分隔。')
     s.add_argument('--ffmpeg', default=os.environ.get('VOR_FFMPEG') or 'ffmpeg')
     s = subs['crop']
     s.add_argument('--asset', required=True)
-    s.add_argument('--box', required=True, help='x0,y0,x1,y1 in original image pixels, right/bottom exclusive.')
+    s.add_argument('--box', required=True, help='原图像素坐标 x0,y0,x1,y1，右/下边界为开区间。')
     s = subs['record-view']
     s.add_argument('--asset', required=True)
     s.add_argument('--actor', required=True)
     s.add_argument('--tool', required=True, choices=['view_image', 'read_image', 'image_tool', 'visible_attachment'])
-    s.add_argument('--trace', required=True, help='Real image tool call/message reference, not a filename.')
-    s.add_argument('--observation', required=True, help='What was actually visible, including unreadable regions.')
+    s.add_argument('--trace', required=True, help='实际图片调用或消息引用，例如 read_image#msg-42。')
+    s.add_argument('--observation', required=True, help='实际可见内容与待辨认区域。')
     subs['import-records'].add_argument('records', type=Path)
-    subs['plan'].add_argument('--max-span', type=float, default=15.0, help='Local overview context duration; no total frame cap.')
+    subs['plan'].add_argument('--max-span', type=float, default=15.0, help='概览分组的上下文时长（秒）。')
     s = subs['sheet']
     s.add_argument('--frames', required=True)
     s.add_argument('--thumb-width', type=int, default=480)
@@ -90,21 +90,25 @@ def parser():
     s.add_argument('--sheet', required=True)
     s.add_argument('--actor', required=True)
     s.add_argument('--trace', required=True)
-    s.add_argument('--observations', required=True, type=Path, help='JSON object: only actually displayed asset IDs to observations.')
+    s.add_argument('--observations', required=True, type=Path, help='JSON 对象：已展示资产 ID 对应逐图观察。')
     subs['tracks'].add_argument('--ffprobe', default=os.environ.get('VOR_FFPROBE') or 'ffprobe')
     s = subs['subtitles']
     s.add_argument('source', type=Path)
     s.add_argument('--offset', type=float, default=0.0, help='original_video_time = subtitle_time + offset')
     s.add_argument('--language', default='und')
-    s.add_argument('--stream', type=int, default=0, help='Subtitle s:N ordinal; text tracks only.')
+    s.add_argument('--stream', type=int, default=0, help='文本字幕流 s:N 的序号。')
     s.add_argument('--ffmpeg', default=os.environ.get('VOR_FFMPEG') or 'ffmpeg')
     subs['transcript'].add_argument('source', type=Path)
+    subs['validate'].description = ('valid 表示源文件、证据与记录完整性；review_complete 表示候选查看及当前模式复核门禁完成。'
+                                     '默认退出码按 valid 返回 0/1；--require-coverage 将审阅完成度加入退出状态。')
     subs['validate'].add_argument('--require-coverage', action='store_true',
-                                  help='Require the selected mode coverage, continuity and a current recorded independent review.')
+                                  help='要求完整审阅；待完成时 valid=false，退出码 1。')
+    for name in ('validate', 'export'):
+        subs[name].add_argument('--rehash-source', action='store_true', help='本次重新计算源视频完整 SHA-256。')
     subs['validate'].add_argument('--mode', choices=['layered','strict'])
-    subs['audit'].add_argument('--mode', choices=['layered','strict'], help='Default: saved work mode; old work retains strict.')
-    subs['audit'].add_argument('--queue', action='store_true', help='Add suggested gap frames to candidates without decoding or marking views.')
-    subs['audit'].add_argument('--summary', action='store_true', help='Print counts and review status; omit large finding/state lists.')
+    subs['audit'].add_argument('--mode', choices=['layered','strict'], help='默认使用库内模式；旧库保留 strict。')
+    subs['audit'].add_argument('--queue', action='store_true', help='把建议复查帧追加到候选队列。')
+    subs['audit'].add_argument('--summary', action='store_true', help='输出计数与复核状态摘要。')
     return p
 
 
@@ -166,14 +170,14 @@ def main():
             elif command == 'import-records':
                 result = import_records(conn, args.records)
             elif command == 'validate':
-                result = validate(conn, args.work, args.require_coverage, args.mode)
+                result = validate(conn, args.work, args.require_coverage, args.mode, args.rehash_source)
             elif command == 'audit':
                 result = audit_omissions(conn, args.work, queue=args.queue, mode=args.mode)
                 if args.summary:
                     result = {key: result[key] for key in ['snapshot', 'summary', 'records_ready_for_omission_review',
                               'omission_review', 'review_gate_passed_recorded', 'semantic_completeness_proven', 'assurance']}
             elif command == 'export':
-                result = export_records(conn, args.work)
+                result = export_records(conn, args.work, args.rehash_source)
             else:
                 result = status(conn)
             print(dump(result))
@@ -186,7 +190,10 @@ def main():
                     'hint': 'Run doctor with the same Python executable, then install the missing requirements.'}))
         return 1
     except Exception as exc:
-        print(dump({'error': str(exc), 'type': type(exc).__name__}))
+        result = {'error': str(exc), 'type': type(exc).__name__}
+        if getattr(exc, 'code', None):
+            result['code'] = exc.code
+        print(dump(result))
         return 1
 
 

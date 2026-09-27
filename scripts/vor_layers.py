@@ -1,4 +1,4 @@
-"""Layered review planning and records; machine proposals never attest to human review."""
+"""分层建议、人工区间、抽查及复核记录。"""
 import hashlib
 import json
 import math
@@ -40,7 +40,7 @@ def index_fingerprint(conn):
 
 
 def prepare(conn, work=None, max_span=15.0, layout_fraction=0.12, stable_seconds=0.75):
-    """Partition every computed frame. Limits bound local context, never total completion."""
+    """按局部上下文为全部已计算帧生成建议区间。"""
     if not all(math.isfinite(x) and x > 0 for x in (max_span,layout_fraction,stable_seconds)):
         raise ValueError('Segmentation controls must be finite and positive.')
     config=dict(contract=1,max_span=max_span,layout_fraction=layout_fraction,stable_seconds=stable_seconds)
@@ -56,7 +56,7 @@ def prepare(conn, work=None, max_span=15.0, layout_fraction=0.12, stable_seconds
             if changes:
                 reps.add(max(changes,key=lambda s:s['local_delta'])['start_frame'])
                 reps.add(min(changes,key=lambda s:s['local_delta'])['start_frame'])
-            # Returning to an earlier exact image is a retrace clue, not proof of cancellation.
+            # Returning to an earlier exact image supplies a retrace clue for review.
             seen={}; retraces=[]
             for s in bucket:
                 if s['digest'] in seen: retraces.append(s['start_frame'])
@@ -71,7 +71,7 @@ def prepare(conn, work=None, max_span=15.0, layout_fraction=0.12, stable_seconds
                 risk_clues={'distinct_states':len(bucket),'small_change_frames':[s['start_frame'] for s in changes if (s['fraction'] or 0)<0.01],
                             'retrace_frames':retraces,'one_frame_states':[s['start_frame'] for s in bucket if s['start_frame']==s['end_frame']]},
                 merge='exact' if len(bucket)==1 else 'approximate_proposal',
-                precision='overview only; native evidence is needed for operations and small text'))
+                precision='概览代表画面；操作数值使用 native 原图或裁剪。'))
             bucket.clear()
         previous=None
         for row in state_rows(conn):
@@ -88,7 +88,7 @@ def prepare(conn, work=None, max_span=15.0, layout_fraction=0.12, stable_seconds
         flush()
         if not proposals: raise ValueError('No computed frames; scan first.')
         with conn:
-            # Authored intervals/checks never overwritten by planning.
+            # Preserve authored intervals/checks while refreshing proposals.
             log_history(conn,'layer_plan_previous',payloads(conn,'segments'))
             conn.execute('DELETE FROM segments')
             for p in proposals: conn.execute('INSERT INTO segments VALUES (?,?)',(p['id'],dump(p)))
@@ -156,7 +156,7 @@ def check_layer_records(conn,data):
         if e.get('conclusion') not in ('no_additional_omissions_found','gaps_found','incomplete'): raise ValueError('Invalid review conclusion.')
     if not _strings(data.get('retire_intervals',[])): raise ValueError('Retire intervals by ID.')
     if set(data.get('retire_intervals',[])) & {e['id'] for e in data.get('intervals',[])}:
-        raise ValueError('Cannot retire and update same interval in one import.')
+        raise ValueError('请为退役区间的新版本分配新的区间 ID。')
 
 
 def import_layer_records(conn,data):
@@ -195,7 +195,7 @@ def viewed_frames(conn,refs,actor,native=False,full=False):
 
 
 def covered_targets(conn, targets, viewed):
-    """Exact-run equivalence only; approximate groups never create evidence equivalence."""
+    """按连续精确 RGB 状态计算证据等价。"""
     wanted=sorted(set(targets)|set(viewed)); states={}
     for offset in range(0,len(wanted),800):
         chunk=wanted[offset:offset+800]
@@ -287,7 +287,7 @@ def sample_requirements(conn,entry):
     return dict(interval_id=entry['id'],scope_hash=scope_hash,required=required,frames=sorted(frames),
                 strategy='strongest local change + weakest nonzero local change + deterministic content-seeded sample',
                 all_state_frames=[r['start_frame'] for r in rows],
-                warning='Sample checks are bounded; unsampled small edits can remain. Expand on anomalies.')
+                warning='按风险与内容种子抽查，发现异常后展开对应状态区间。')
 
 
 def manifest(conn):

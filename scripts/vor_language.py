@@ -1,26 +1,28 @@
-"""FFmpeg-normalized subtitles and explicit-time-base ASR interchange. No model/API calls."""
+"""FFmpeg 字幕规范化与显式时间基准的转写交换接口。"""
 from bisect import bisect_left
 import json
 import math
 from pathlib import Path
 import re
 import subprocess
+import vor_media as media
 
 from vor_store import dump, get_meta, log_history, now, ranges, sha256
-from vor_media import bind_source, finite_float, process_options, version
+from vor_media import bind_source, finite_float, helper_attempt, run_helper, version
 from vor_layers import canonical_hash
 
 
 def tracks(conn,ffprobe='ffprobe'):
-    source=get_meta(conn,'source')
-    bind_source(conn,source['path'])
-    p=subprocess.run([ffprobe,'-v','error','-show_streams','-of','json',source['path']],capture_output=True,**process_options())
-    if p.returncode: raise ValueError(p.stderr.decode('utf-8',errors='replace'))
-    streams=json.loads(p.stdout)['streams']
-    simplify=lambda s:{k:s.get(k) for k in ('index','codec_name','codec_type','start_time','duration','tags')}
-    return dict(audio=[simplify(s) for s in streams if s['codec_type']=='audio'],
-                subtitles=[simplify(s) for s in streams if s['codec_type']=='subtitle'],asr_started=False,
-                policy='Existing captions first. No automatic transcription, translation, model download or external upload.')
+    with helper_attempt(conn, 'tracks'):
+        source=get_meta(conn,'source')
+        bind_source(conn,source['path'])
+        p=run_helper([ffprobe,'-v','error','-show_streams','-of','json',source['path']],capture_output=True)
+        if p.returncode: raise ValueError(p.stderr.decode('utf-8',errors='replace'))
+        streams=json.loads(p.stdout)['streams']
+        simplify=lambda s:{k:s.get(k) for k in ('index','codec_name','codec_type','start_time','duration','tags')}
+        return dict(audio=[simplify(s) for s in streams if s['codec_type']=='audio'],
+                    subtitles=[simplify(s) for s in streams if s['codec_type']=='subtitle'],asr_started=False,
+                    policy='优先使用已有字幕，支持本地文本字幕与外部转写 JSON 对齐。')
 
 
 def _number(value):
@@ -34,7 +36,7 @@ def _clock(text):
 
 
 def _normalized_srt(text):
-    # This is a decoder of FFmpeg's canonical output, not a replacement SRT/VTT parser.
+    # Decode FFmpeg's normalized SRT output.
     result=[]
     for block in re.split(r'\n\s*\n',text.replace('\r\n','\n').strip()):
         lines=block.splitlines()
@@ -119,7 +121,7 @@ def _store(conn,source,segments,offset,language,time_base,key):
                          speaker=s.get('speaker'),confidence=s.get('confidence'),evidence_role='language_clue_only'))
     record=dict(id=key,source=source,offset_seconds=offset,time_base=time_base,language=language,cues=cues,
                 warnings=sorted(set(warnings)),created=now(),cache_reused=False,
-                boundary='Speech/subtitles express intent; they do not prove clicks, UI values or execution success.')
+                boundary='讲解与字幕提供线索；操作数值和结果关联画面证据。')
     with conn:
         conn.execute('INSERT INTO language_sources VALUES (?,?)',(key,dump(record)))
         log_history(conn,'language_import',dict(id=key,source=source,cues=len(cues)))
@@ -139,22 +141,23 @@ def _index_key(conn):
 
 
 def import_subtitles(conn,work,path,offset=0.0,language='und',stream=0,ffmpeg='ffmpeg'):
-    offset=_number(offset); path=Path(path).resolve(strict=True)
-    if type(stream) is not int or stream<0: raise ValueError('Subtitle stream is a nonnegative s:N ordinal.')
-    source=dict(path=str(path),sha256=sha256(path),kind='subtitle',stream=f's:{stream}',parser='FFmpeg',version=version(ffmpeg))
-    key='lang-'+canonical_hash([source,offset,language,_index_key(conn)])[:24]
-    cached=_cached(conn,key)
-    if cached: return cached
-    p=subprocess.run([ffmpeg,'-hide_banner','-nostdin','-v','error','-copyts','-i',str(path),'-map',f'0:s:{stream}',
-                      '-c:s','srt','-f','srt','pipe:1'],capture_output=True,**process_options())
-    logdir=Path(work)/'logs'; logdir.mkdir(exist_ok=True)
-    (logdir/(key+'.log')).write_bytes(p.stderr)
-    if p.returncode or p.stderr.strip():
-        raise ValueError('Subtitle decoding unavailable/failed; inspect '+str(logdir/(key+'.log')))
-    text=p.stdout.decode('utf-8-sig')
-    if not text.strip(): raise ValueError('No text subtitle cues. Bitmap subtitles require a separately authorized OCR stage.')
-    segments=_normalized_srt(text)
-    return _store(conn,source,segments,offset,language,'source_pts_plus_offset',key)
+    with helper_attempt(conn, 'subtitles'):
+        offset=_number(offset); path=Path(path).resolve(strict=True)
+        if type(stream) is not int or stream<0: raise ValueError('Subtitle stream is a nonnegative s:N ordinal.')
+        source=dict(path=str(path),sha256=sha256(path),kind='subtitle',stream=f's:{stream}',parser='FFmpeg',version=version(ffmpeg))
+        key='lang-'+canonical_hash([source,offset,language,_index_key(conn)])[:24]
+        cached=_cached(conn,key)
+        if cached: return cached
+        p=run_helper([ffmpeg,'-hide_banner','-nostdin','-v','error','-copyts','-i',str(path),'-map',f'0:s:{stream}',
+                          '-c:s','srt','-f','srt','pipe:1'],capture_output=True,timeout=media.MEDIA_TIMEOUT)
+        logdir=Path(work)/'logs'; logdir.mkdir(exist_ok=True)
+        (logdir/(key+'.log')).write_bytes(p.stderr)
+        if p.returncode or p.stderr.strip():
+            raise ValueError('Subtitle decoding unavailable/failed; inspect '+str(logdir/(key+'.log')))
+        text=p.stdout.decode('utf-8-sig')
+        if not text.strip(): raise ValueError('请选择含文本 cue 的字幕输入，图像字幕可经 OCR 转成文本后导入。')
+        segments=_normalized_srt(text)
+        return _store(conn,source,segments,offset,language,'source_pts_plus_offset',key)
 
 
 def import_transcript(conn,work,path):
@@ -169,7 +172,7 @@ def import_transcript(conn,work,path):
     offset=_number(data.get('offset_seconds',0.0))
     if data['time_base']=='video_relative':
         first=conn.execute('SELECT time_s FROM frames ORDER BY frame_no LIMIT 1').fetchone()
-        if first is None or first[0] is None: raise ValueError('Cannot align relative ASR without the first original PTS.')
+        if first is None or first[0] is None: raise ValueError('请先建立包含首帧原始 PTS 的视频索引，再对齐相对时间转写。')
         offset+=first[0]
     source=dict(path=str(path),sha256=sha256(path),kind='asr_interchange',engine=data.get('engine','user_supplied'),
                 model=data.get('model'),glossary=data.get('glossary',[]),provenance=data.get('provenance'))

@@ -1,2 +1,2 @@
-numpy
-Pillow>=10.1
+numpy>=2,<3
+Pillow>=10.1,<13

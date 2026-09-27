@@ -1,0 +1,89 @@
+{
+  "date": "2026-09-27",
+  "baseline_commit": "ec6748bc04e0e76d4d03d94173d76c61fe7b8177",
+  "environment": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.10",
+    "numpy": "2.5.1",
+    "pillow": "12.3.0",
+    "ffmpeg": "ffmpeg version 8.1.2-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers"
+  },
+  "fixture": {
+    "width": 1920,
+    "height": 1080,
+    "frames": 120,
+    "fps": 30,
+    "codec": "FFV1",
+    "sha256": "88cf2cc983b1ac9462613a8cf3b0967111057e81afd0ab2d191afcd43d049950"
+  },
+  "method": "同一输入、同一解释器和 FFmpeg，3 组交替顺序串行运行，每次新建审阅库；计时覆盖 database+scan，内存为 Python 扫描进程 PeakWorkingSetSize。",
+  "runs": [
+    {
+      "pair": 1,
+      "version": "before",
+      "seconds": 7.23352700000396,
+      "python_peak_working_set_bytes": 87605248,
+      "computed_frames": 120,
+      "full_compute_complete": true,
+      "frame_metrics_sha256": "f1a954a4f5582db54873bd75f712505e9129ce03f3047e7cb39f91c41dd854fc"
+    },
+    {
+      "pair": 1,
+      "version": "after",
+      "seconds": 7.282949500018731,
+      "python_peak_working_set_bytes": 87252992,
+      "computed_frames": 120,
+      "full_compute_complete": true,
+      "frame_metrics_sha256": "f1a954a4f5582db54873bd75f712505e9129ce03f3047e7cb39f91c41dd854fc"
+    },
+    {
+      "pair": 2,
+      "version": "after",
+      "seconds": 7.204641799966339,
+      "python_peak_working_set_bytes": 87326720,
+      "computed_frames": 120,
+      "full_compute_complete": true,
+      "frame_metrics_sha256": "f1a954a4f5582db54873bd75f712505e9129ce03f3047e7cb39f91c41dd854fc"
+    },
+    {
+      "pair": 2,
+      "version": "before",
+      "seconds": 7.164535399992019,
+      "python_peak_working_set_bytes": 86925312,
+      "computed_frames": 120,
+      "full_compute_complete": true,
+      "frame_metrics_sha256": "f1a954a4f5582db54873bd75f712505e9129ce03f3047e7cb39f91c41dd854fc"
+    },
+    {
+      "pair": 3,
+      "version": "before",
+      "seconds": 7.17036350001581,
+      "python_peak_working_set_bytes": 86949888,
+      "computed_frames": 120,
+      "full_compute_complete": true,
+      "frame_metrics_sha256": "f1a954a4f5582db54873bd75f712505e9129ce03f3047e7cb39f91c41dd854fc"
+    },
+    {
+      "pair": 3,
+      "version": "after",
+      "seconds": 7.180393600021489,
+      "python_peak_working_set_bytes": 87384064,
+      "computed_frames": 120,
+      "full_compute_complete": true,
+      "frame_metrics_sha256": "f1a954a4f5582db54873bd75f712505e9129ce03f3047e7cb39f91c41dd854fc"
+    }
+  ],
+  "medians": {
+    "before": {
+      "seconds": 7.17036350001581,
+      "python_peak_working_set_bytes": 86949888
+    },
+    "after": {
+      "seconds": 7.204641799966339,
+      "python_peak_working_set_bytes": 87326720
+    }
+  },
+  "frame_metrics_equal": true,
+  "elapsed_change_percent": 0.4780552610819999,
+  "memory_change_percent": 0.4333898624458321
+}

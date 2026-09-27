@@ -1,4 +1,4 @@
-"""Read-only dependency checks that work without NumPy or Pillow installed."""
+"""使用标准库检查本地媒体处理依赖。"""
 import importlib
 from pathlib import Path
 import re
@@ -48,7 +48,7 @@ def executable_check(command, name):
 
 
 def diagnose(ffmpeg='ffmpeg', ffprobe='ffprobe'):
-    """Report local processing readiness; host vision is outside this process."""
+    """报告本地处理环境状态。"""
     checks = {
         'python': {'ok': sys.version_info >= (3, 10), 'version': sys.version.split()[0],
                    'executable': sys.executable},
@@ -62,8 +62,8 @@ def diagnose(ffmpeg='ffmpeg', ffprobe='ffprobe'):
         'checks': checks,
         'visual_review': {
             'status': 'unverified',
-            'reason': 'The host must actually display evidence with an image-capable model before recording a view.',
+            'reason': '请用支持图像输入的模型实际展示证据，再登记查看。',
         },
         'hint': 'Use this Python executable with -m pip install -r <skill-root>/requirements.txt for missing packages. '
-                'For FFmpeg use --ffmpeg/--ffprobe or VOR_FFMPEG/VOR_FFPROBE. No software or config was changed.',
+                'FFmpeg 路径使用 --ffmpeg/--ffprobe 或 VOR_FFMPEG/VOR_FFPROBE。',
     }

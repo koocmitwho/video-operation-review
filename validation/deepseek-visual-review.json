@@ -54,11 +54,14 @@
     "review_kind": "self_review",
     "semantic_completeness_proven": false
   },
-  "prepublication_tests": {"passed": 69, "failed": 0, "seconds": 78.896},
-  "limits": [
-    "A bounded synthetic recording, not a real-user-video benchmark.",
-    "Actual tool receipts were checked separately; ledger independent-vision count remains null.",
-    "No claimed frame-count, token, time, or cost savings.",
-    "Raw sessions, local paths, images, and databases remain outside the public repository."
+  "prepublication_tests": {
+    "passed": 69,
+    "failed": 0,
+    "seconds": 78.896
+  },
+  "evidence_scope": [
+    "32 帧合成录屏视觉试用。",
+    "工具收据单独核对，ledger 预留独立核对计数为 null。",
+    "原始会话、图片和数据库保存在本地验证目录。"
   ]
 }

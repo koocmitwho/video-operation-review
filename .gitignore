@@ -21,3 +21,9 @@ outputs/
 *.webm
 *.mp3
 *.wav
+layer-plan.json
+review.json
+frames.jsonl
+omission-audit.json
+report.md
+evidence/

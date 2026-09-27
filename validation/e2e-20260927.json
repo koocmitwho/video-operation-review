@@ -1,0 +1,14 @@
+{
+  "fixture": "make_gui_fixture.py",
+  "source_frames": 12,
+  "candidates": 9,
+  "actual_view_image_calls": 2,
+  "recorded_view_events": 2,
+  "unique_source_frames": 1,
+  "candidates_pending": 8,
+  "record_integrity": true,
+  "review_complete": false,
+  "coverage_exit_code": 1,
+  "export_succeeded": true,
+  "trace_reference_basis": "本会话实际 view_image 展示的帧 8 原图与裁剪；以本地标签关联两次工具结果。"
+}

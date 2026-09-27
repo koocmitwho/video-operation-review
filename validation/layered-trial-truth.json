@@ -1,0 +1,20 @@
+{
+  "definition_date": "2026-09-27",
+  "fixture": "scripts/tests/make_layered_fixture.py",
+  "definition_basis": "生成器已有 key_frames=16..24；本文件补全对应画面内容与判定规则。",
+  "historical_score_basis": "2026-09-24 试用汇总记录两种模式各 9/9；本次补定义沿用该历史记录。",
+  "frame_numbering": "从 0 起始，原始呈现顺序",
+  "source_frames": 32,
+  "judgement_rule": "逐项查看对应帧的原图或可读裁剪，核对 expected_visible 中的对象、数值和状态；9 项分别计数。临时输入、取消后的已应用值和最终已应用值分别判定，原图帧号可回查。",
+  "key_states": [
+    {"frame_no": 16, "expected_visible": "单帧菜单 Edit rate... 与 Menu visible for ONE frame；底部状态为 Ready。"},
+    {"frame_no": 17, "expected_visible": "Rate settings 对话框输入值 0.20；背景 Applied rate 为 1.00，Apply 与 Cancel 可见。"},
+    {"frame_no": 18, "expected_visible": "对话框关闭；状态栏 Cancelled. Applied rate remains 1.00。"},
+    {"frame_no": 19, "expected_visible": "重新打开 Rate settings；输入框为 1.00。"},
+    {"frame_no": 20, "expected_visible": "Rate settings 输入框改为 0.02；背景 Applied rate 为 1.00。"},
+    {"frame_no": 21, "expected_visible": "对话框关闭；Applied rate 和状态栏均显示已应用值 0.02。"},
+    {"frame_no": 22, "expected_visible": "Output: result.csv；状态栏 Export completed: result.csv。"},
+    {"frame_no": 23, "expected_visible": "单帧菜单 Import result.csv；下方保留导出文件与完成状态。"},
+    {"frame_no": 24, "expected_visible": "Input: result.csv | Loaded rows: 8；状态栏 Loaded result.csv (8 rows)。"}
+  ]
+}

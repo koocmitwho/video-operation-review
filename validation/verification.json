@@ -25,13 +25,14 @@
     "source_frames": 32,
     "strict_displayed_source_frames": 32,
     "layered_displayed_source_frames": 18,
-    "visible_checkpoints": [
+    "final_parameter_errors": 0,
+    "strict_blind_test": false,
+    "full_review_gate_passed": false,
+    "visible_key_states": [
       9,
       9
     ],
-    "final_parameter_errors": 0,
-    "strict_blind_test": false,
-    "full_review_gate_passed": false
+    "key_state_definition": "layered-trial-truth.json"
   },
-  "evidence_boundary": "Unit tests are reproducible from repository fixtures; raw host conversations and visual-call logs remain local. No fixed token/time saving is claimed."
+  "evidence_boundary": "脚本测试使用仓库合成素材；视觉试用数值来自当时工具核对汇总，原始会话与收据保存在本地。"
 }

@@ -153,7 +153,7 @@ class MediaScalingContract(unittest.TestCase):
             script = ('import pathlib,sys; sys.stdout.buffer.write(pathlib.Path(sys.argv[1]).read_bytes()); '
                       'sys.stdout.flush(); sys.stderr.write("synthetic decoder tail failure\\n"); sys.exit(7)')
             return subprocess.Popen([sys.executable, '-B', '-c', script, str(self.ppm)],
-                                    stdout=subprocess.PIPE, stderr=log, **media.process_options())
+                                    stdout=subprocess.PIPE, stderr=log, **media.process_options(timeout=None))
         with patch.object(media, 'decoder', side_effect=failed_tail):
             with self.assertRaisesRegex(RuntimeError, 'FFmpeg decode failed/degraded'):
                 media.scan(self.conn, self.work, self.small, max_new_frames=8)

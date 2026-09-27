@@ -7,13 +7,13 @@ from vor_layers import (canonical_hash, coarse_ok, complement, covered_targets, 
 
 
 def audit_layers(conn,work,queue=False,base_validation=None):
-    base=validate(conn,work) if base_validation is None else base_validation
+    base=validate(conn,work,_include_review=False) if base_validation is None else base_validation
     audit=EvidenceAudit(conn); status=base['status']
     entries=sorted(payloads(conn,'intervals'),key=lambda e:(e['start_frame'],e['end_frame'],e['id']))
     checks=payloads(conn,'interval_checks'); entries_by_id={e['id']:e for e in entries}
     if not base['valid']: audit.finding('record_consistency_failed','记录或证据文件校验失败。',stage='records',validation_errors=base['errors'])
     if not status['full_compute_complete']:
-        audit.finding('full_scan_incomplete','全帧索引/计算尚未完整；未处理尾部不能被区间声明覆盖。',stage='records',
+        audit.finding('full_scan_incomplete','全帧索引/计算待完成，请按后续范围继续。',stage='records',
                       unprocessed_ranges=status['unprocessed_ranges'],unindexed_tail=status['unindexed_tail'])
     end=max(audit.frames,default=-1)
     spans=[[e['start_frame'],e['end_frame']] for e in entries]
@@ -33,7 +33,7 @@ def audit_layers(conn,work,queue=False,base_validation=None):
             audit.finding('interval_overview_missing',f'区间 {ident} 缺少本审阅者的首尾代表全画面（可概览）查看登记。',bounds,interval_id=ident)
         mapping=interval_mapping(conn,e)
         if e['merge']=='exact' and len(mapping)>1:
-            audit.finding('false_exact_merge',f'区间 {ident} 含不同 RGB 状态，不能称为精确重复。',bounds,interval_id=ident)
+            audit.finding('false_exact_merge',f'区间 {ident} 含不同 RGB 状态，请使用符合区间内容的合并类型。',bounds,interval_id=ident)
         if e['merge']=='none' and len(mapping)>1 and e['disposition']!='operation':
             audit.finding('merge_reason_missing',f'区间 {ident} 合并多个非操作状态却未声明 approximate。',bounds,interval_id=ident)
         for issue in e['issue_ids']:
@@ -62,7 +62,7 @@ def audit_layers(conn,work,queue=False,base_validation=None):
             okay=targets<=covered_targets(conn,targets,seen)
             audit.evidence(c['evidence'],c['id'],req['frames'],stage='sampling')
             if not okay:
-                audit.finding('sample_evidence_incomplete',f"抽查 {c['id']} 缺少本人的风险/随机样本原图查看；概览不能代替。",sorted(targets),stage='sampling')
+                audit.finding('sample_evidence_incomplete',f"抽查 {c['id']} 请补充本人的风险/随机样本原图查看。",sorted(targets),stage='sampling')
             elif c['conclusion']=='clear':
                 valid.append(c)
                 for ref in c.get('resolves',[]):
@@ -82,7 +82,7 @@ def audit_layers(conn,work,queue=False,base_validation=None):
             if c['conclusion']=='expand' and c['id'] not in resolved:
                 audit.finding('sample_requires_expansion',f"抽查 {c['id']} 发现异常；展开区间 {ident} 并补充步骤/疑点，穷尽复查后才能关闭。",
                               [e['start_frame']-1,*req['all_state_frames'],e['end_frame']+1],stage='sampling',interval_id=ident)
-    # Retiring an interval cannot silently discard an anomaly.
+    # Keep anomaly references attached to the original interval history.
     retired_resolved=valid_resolutions
     for c in checks:
         if c['interval_id'] not in entries_by_id and c['conclusion']=='expand' and c['id'] not in retired_resolved:
@@ -111,7 +111,7 @@ def audit_layers(conn,work,queue=False,base_validation=None):
                 findings=audit.findings,summary=dict(intervals=len(entries),**counts,findings=len(audit.findings),suggested_frame_count=len(suggested),queued_requests=queued),
                 suggested_frames=suggested,records_ready_for_omission_review=ready,omission_review=review,
                 review_gate_passed_recorded=ready and review['status']=='current_independent_review_recorded',
-                semantic_completeness_proven=False,assurance='Interval coverage and bounded sample/evidence consistency only; actual attention and semantic completeness are not proven.')
+                semantic_completeness_proven=False,assurance='按区间覆盖、样本、角色证据与当前复核记录检查。')
 
 
 def _review(conn,audit,entries,requirements,snapshot):
@@ -126,7 +126,7 @@ def _review(conn,audit,entries,requirements,snapshot):
     before=len(audit.findings)
     authors={s.get('author') for s in audit.steps.values()}|{e['reviewer'] for e in entries}
     if r['independence']!='independent' or r['reviewer'] in authors:
-        audit.finding('reviewer_not_independent','这是自审或与作者同名；不能算独立遗漏复核。',stage='review')
+        audit.finding('reviewer_not_independent','当前为自审或与作者同名；独立复核请填写对应审阅者。',stage='review')
     if set(r['checked_interval_ids'])!={e['id'] for e in entries}:
         audit.finding('review_scope_incomplete','复核未覆盖所有粗审区间。',stage='review')
     audit.evidence(r['evidence'],r['id'],stage='review')

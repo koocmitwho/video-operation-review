@@ -1,3 +1,7 @@
 interface:
   display_name: "软件操作录屏审阅"
   short_description: "全帧索引、分层审阅与字幕对齐，还原可复现操作并保留证据与未解决疑点"
+  default_prompt: "请使用 $video-operation-review 审阅本轮软件录屏，整理操作步骤、最终参数、画面证据与审阅进度。"
+
+policy:
+  allow_implicit_invocation: false

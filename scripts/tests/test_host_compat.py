@@ -104,13 +104,13 @@ class HostCompatibility(unittest.TestCase):
             asset = conn.execute('SELECT id FROM assets WHERE frame_no=0').fetchone()[0]
         for tool in ('read_image', 'view_image'):
             self.result(self.cli('record-view', '--work', work, '--asset', asset,
-                '--actor', 'test-only', '--tool', tool, '--trace', f'synthetic-test-{tool}',
+                '--actor', 'test-only', '--tool', tool, '--trace', f'synthetic-test://{tool}',
                 '--observation', 'Synthetic test event; no actual visual review.'), 0)
         with closing(sqlite3.connect(work / 'review.sqlite3')) as conn:
             tools = conn.execute('SELECT tool, trace_ref FROM views ORDER BY rowid').fetchall()
             count = conn.execute('SELECT COUNT(DISTINCT frame_no) FROM views').fetchone()[0]
-        self.assertEqual(tools, [('read_image', 'synthetic-test-read_image'),
-                                 ('view_image', 'synthetic-test-view_image')])
+        self.assertEqual(tools, [('read_image', 'synthetic-test://read_image'),
+                                 ('view_image', 'synthetic-test://view_image')])
         self.assertEqual(count, 1)
 
 

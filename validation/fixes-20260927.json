@@ -1,0 +1,36 @@
+{
+  "date": "2026-09-27",
+  "baseline_commit": "ec6748bc04e0e76d4d03d94173d76c61fe7b8177",
+  "branch": "fix/p0-evidence-and-guards",
+  "baseline": {
+    "tests": 98,
+    "seconds": 87.304,
+    "python": "3.12.10",
+    "log": "tests-98.log"
+  },
+  "tests": [
+    {
+      "python": "3.12.10",
+      "passed": 132,
+      "seconds": 93.525,
+      "log": "tests-fixes-20260927.log"
+    },
+    {
+      "python": "3.10.11",
+      "passed": 132,
+      "seconds": 135.805,
+      "log": "tests-fixes-python310-20260927.log"
+    }
+  ],
+  "new_test_methods": 34,
+  "schema_version": 3,
+  "additional_runtime_dependencies": [],
+  "doctor_ready": true,
+  "skill_format": "passed",
+  "e2e": "e2e-20260927.json",
+  "performance": "performance-1080p-20260927.json",
+  "current_remote_ci": "pending_maintainer_review",
+  "publication_status": "local_changes_for_review",
+  "key_state_definition": "layered-trial-truth.json",
+  "copy_style": "功能、操作、字段定义与实际验证结果"
+}

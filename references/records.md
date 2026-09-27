@@ -1,16 +1,16 @@
 # 操作记录、统计与审计
 
-编写步骤、合并子代理结果或检查证据口径时读本文。
+本文定义步骤 JSON、证据引用和统计口径。
 
 ## 目录与身份
 
-每个 `--work` 包含 `review.sqlite3`、`logs/`、按需产生的 `evidence/`；`export` 额外生成 `review.json`、`frames.jsonl`、`omission-audit.json`、`report.md`。输入视频不会复制到输出目录。缓存迁移需连同数据库和证据保留；若有 WAL/SHM 文件，应先结束写进程，再正常打开关闭数据库或使用 SQLite backup，不只复制正在写入的主文件。
+每个 `--work` 包含 `review.sqlite3`、`logs/` 和按需产生的 `evidence/`；export 生成 `review.json`、`frames.jsonl`、`omission-audit.json`、`report.md`。输入视频保留在 source.path。迁移缓存时保留数据库和证据；活动库使用 SQLite backup，或结束写入并正常关闭数据库后复制。
 
-源帧身份为“源文件 SHA-256 + v:0 + 0 起始 frame_no”。全图 ID 为 `f000000003`；裁剪 ID 包含坐标，但仍引用同一源帧。重复打开、裁剪或放大均按该身份去重。两个不同帧即使像素相同，若实际分别打开，仍是两个源帧；被代表图覆盖而未打开的帧不计入实际查看。
+源帧身份为“源文件 SHA-256 + v:0 + 0 起始 frame_no”。全图 ID 如 `f000000003`，裁剪 ID 附带坐标并继承源帧。查看事件按该身份去重，精确重复段另外保留代表映射。
 
 ## 步骤与疑点导入
 
-以下是格式示例，不是任何真实录屏的已确认事实。将字段改为实际观察后保存 UTF-8 JSON，运行 `import-records`。每条步骤必须有所有字段；未出现的菜单、参数或文件标为“未展示/不适用”，不能补猜。时间由 `start_frame/end_frame` 从索引解析，报告显示原始秒和帧号。
+下面是字段示例。按实际观察填写后保存 UTF-8 JSON，再运行 import-records。时间由 start_frame/end_frame 查询原始索引。
 
 ```json
 {
@@ -51,48 +51,54 @@
 }
 ```
 
-步骤状态：`confirmed`（列出的关键事实均有证据且无未解决项）、`partial`（部分确定）、`unresolved`（仍待确认）。没有证据的推测单独列为 issue，不作为已还原步骤。疑点状态：`open`、`blocked`、`resolved`；`blocked` 仅说明现有录屏不足，不是平台任务状态。
+步骤状态为 `confirmed`、`partial`、`unresolved`；疑点状态为 `open`、`blocked`、`resolved`。`confirmed` 对应证据齐全且疑点已解决的步骤，`blocked` 表示该疑点等待补充材料。
 
-顶层 `evidence` 列出本步骤所有引用，参数内部的 evidence 也必须列于顶层，便于校验。校验器验证引用存在且该具体图有查看登记；看过全图不会自动证明后来裁剪图也被看过。文件名相同不证明文件内容/版本相同；源码显示不证明已经运行。跨阶段用可见对象名、路径、窗口标题和参数状态核对交接，不靠时间接近来猜。
+顶层 evidence 包含步骤的全部引用，包括参数内部的 evidence。每个引用关联具体图片和查看登记。文件交接按可见对象、路径、窗口标题、版本与参数状态逐项核对。
 
-上面是兼容的基本步骤结构。默认分层审计还需 `author`、`transition`、`role_evidence`，以及区间、抽查与有界复核，见 [layered-review.md](layered-review.md)。只有显式严格模式才需要逐状态 `coverage` 与 `omission_reviews`，见 [omission-review.md](omission-review.md)。普通 `validate` 通过不代表遗漏检查通过。
+分层记录补充 author、transition、role_evidence、intervals、抽查和复核，见 [layered-review.md](layered-review.md)。严格模式的 coverage 和 omission_reviews 见 [omission-review.md](omission-review.md)。多位审阅者返回相同结构及实际工具引用，由单一记录者核对后串行导入。稳定 ID 用于更新，history 保留版本。
 
-子代理返回同一 JSON 结构，并另附每张证据的真实图片工具调用位置、观察、审阅帧清单及阶段前后状态。主代理对照真实工具输出确认后登记，不能批量依据“我已看过”清单登记。重复阶段用稳定 ID 更新；`history` 保留导入版本。不要让多个代理同时写同一个数据库。
+## 查看登记
 
-## 查看登记与审计
+record-view 接收 asset ID、actor、tool、trace 和具体 observation。工具类型为 view_image、read_image、image_tool、visible_attachment；封装工具的实际名称写入 trace。
 
-`record-view` 需要已导出的 asset ID、观察者、图片工具类型、实际调用/消息引用、具体视觉观察。可用工具类型为 `view_image`、`read_image`、`image_tool`、`visible_attachment`；DeepSeek Harness 的图片读取直接登记为 `read_image`。使用其他工具并归类为 `image_tool` 时，在 trace 中写明真实工具名称。工具成功返回图片后才能登记，不把文件名当工具调用位置。文字读取、OCR 及不支持图像的模型返回均不算看图。
+图片展示后登记调用位置，如 `read_image#msg-42`、`session://abc/step-7`、`/tmp/attach/xxx.png#L1`。形式检查识别图片文件名、短裸名称和资产自身 path/id，并提示填写调用引用。交付时把登记与宿主实际工具结果核对，写明核对范围。
 
-记录说明应能支持复核，例如：“frame 37，Rate 框为 5，Apply 按钮可见；状态栏被遮住”。不能仅写“已查看”。同一帧反复打开会保存多条事件，但去重计数不变。仅有裁剪的登记计入曾看过的源帧数，候选的完成还需全图查看记录。
+观察示例：“frame 37，Rate 框为 5，Apply 按钮可见；状态栏待辨认”。重复打开保存多条事件，独立源帧计数保持去重；候选完成采用原图 native 查看登记。
 
-`validate` 证明的只是数据库结构、文件哈希和引用一致；无法从调用引用字符串鉴别是否真的调用了图片工具。`independently_verified_visual_frames=null` 是设计边界；不要声称脚本能独立证明视觉查看。主代理对可访问的真实工具历史核对，并在最终报告附一句核对范围；核实不了的子代理结果单列待核实。
+## 校验与完成度
+
+`valid` 表示源视频、证据哈希和记录引用的完整性；`review_complete` 要求全帧计算、候选选择、候选原图查看和当前模式复核门禁均完成。默认 validate 按 valid 返回 0/1，`--require-coverage` 将 review_complete 加入退出条件。
+
+source_verification 包含源路径、预期/当前 SHA-256、method 和 rehashed。文件属性匹配时复用扫描哈希，属性变化时重算；`--rehash-source` 显式触发完整哈希。导出报告分别展示记录完整性与审阅完成度。
 
 ## 统计字段
 
 | 字段 | 口径 |
 |---|---|
-| video_total_frames | 完整干净 ffprobe 索引得到的可解码呈现帧总数；不完整则 null |
-| container_declared_frames | 容器声明，可为空或不准确 |
-| frame_count_basis | decoded_presentation_frames；frame_no 是该解码时间线的呈现顺序序号，不是容器的声明槽位编号 |
-| container_frame_count_mismatch | 索引完整且两种计数均已知时比较；不等为 true，相等为 false，无法比较为 null。差异会显示为警告，不能单独推断丢帧 |
-| computed_frames / computed_ranges | 实际有持久化完整差分记录的源帧及闭区间 |
-| candidate_requests / candidate_frames | 合并前请求源帧数 / 完全重复段合并后的代表数 |
-| candidates_reviewed_recorded / candidates_pending | 有完整原图查看登记的候选 / 待登记候选 |
-| recorded_visual_unique_frames | 任意原图/裁剪查看登记按源帧去重；需对照实际调用核实 |
-| recorded_full_image_unique_frames | 有全图查看登记的去重源帧数 |
-| independently_verified_visual_frames | 始终 null；仅脚本无法独立核实 |
-| unprocessed_ranges / unindexed_tail | 已索引但未计算的闭区间 / 未完成索引的未知尾部 |
-| source_frames_without_full_view_record_ranges | 已索引、尚无全图查看登记的源帧闭区间，包含未逐张打开的重复帧 |
-| unresolved_issues | 尚未 resolved 的问题，不等同于尚未计算帧 |
-| attempts | 索引、计算、抽图各次尝试、数量、状态和日志位置 |
-| state_accounting_records / omission_review_records | 逐状态说明记录数 / 遗漏复核登记数，均不是完整性证明 |
-| coarse_reviewed_frames_recorded / coarse_reviewed_ranges | 具有本人首尾概览证据的人工区间并集；不等于逐帧看图 |
-| fine_reviewed_frames_recorded / fine_reviewed_ranges | 具有合规操作角色原图/裁剪证据且登记 reviewed 的操作区间并集；仍不是每帧视觉计数 |
-| fine_examined_frames_recorded / fine_examined_ranges | 已看原图/裁剪并形成合规 before/during/after 证据的操作区间；允许结论 partial，区别于已完成精审 |
-| not_fine_examined_ranges | 尚未形成合规操作精审角色证据的范围；不能与尚有疑点、未完成精审的范围混用 |
-| not_coarse_reviewed_ranges / not_fine_reviewed_ranges | 各层未完成范围；背景/等待抽样不自动变为全区间精审 |
-| candidate_operation_units / true_operation_count | 人工候选步骤 ID 去重数 / 始终 null，不能把候选当真实总操作数 |
-| recorded_overview_unique_frames | 实际拼图查看登记涉及的去重源帧；与原图计数可重叠，不能相加得总数 |
-| approximate_merge_intervals | 人工近似合并区间数；精确 RGB 身份不受其影响 |
+| video_total_frames | 完整干净索引得到的可解码呈现帧总数；待完成时 null |
+| container_declared_frames | 容器声明的帧数 |
+| frame_count_basis | decoded_presentation_frames，frame_no 为呈现顺序序号 |
+| container_frame_count_mismatch | 两种已知计数的比较结果；待比较时 null |
+| computed_frames / computed_ranges | 已持久化差分的源帧数与闭区间 |
+| candidate_requests / candidate_frames | 请求源帧数 / 精确重复合并后的代表数 |
+| candidates_reviewed_recorded / candidates_pending | 有 native 原图登记的候选 / 待查看候选 |
+| recorded_visual_unique_frames | 原图、裁剪、拼图查看事件按源帧全局去重 |
+| recorded_full_image_unique_frames | native 全图登记按源帧去重 |
+| recorded_overview_unique_frames | overview 查看事件按源帧去重；各粒度可交叠 |
+| independently_verified_visual_frames | 外部核对计数预留字段，当前值 null |
+| unprocessed_ranges / unindexed_tail | 待计算闭区间 / 待索引尾部 |
+| source_frames_without_full_view_record_ranges | 待补充 native 全图查看登记的源帧范围 |
+| unresolved_issues | open/blocked 疑点列表 |
+| attempts | 各次探测、索引、计算、抽图、轨道和字幕尝试的状态、数量与日志 |
+| state_accounting_records / omission_review_records | 逐状态说明 / 遗漏复核登记数 |
+| coarse_reviewed_frames_recorded / coarse_reviewed_ranges | 有首尾概览依据的人工区间并集 |
+| fine_examined_frames_recorded / fine_examined_ranges | 有合规 before/during/after 原图或裁剪证据的操作区间并集，包含 partial |
+| fine_reviewed_frames_recorded / fine_reviewed_ranges | 已登记 reviewed 且角色证据齐全的操作区间并集 |
+| not_coarse_reviewed_ranges / not_fine_examined_ranges / not_fine_reviewed_ranges | 对应审阅层级的后续范围 |
+| candidate_operation_units | 人工候选步骤 ID 去重数 |
+| true_operation_count | 总操作数预留字段，当前值 null |
+| approximate_merge_intervals | 人工近似合并的区间数 |
+| review_gate_passed_recorded | 当前模式记录满足复核规则的状态 |
+| semantic_completeness_proven | 兼容状态字段，值为 false |
 
-报告必须同时列这几种完成状态：全帧计算、选定候选审阅、全部帧逐张视觉审阅。即使所有代表图都看过，第三项也不会因此完成。审计只有登记口径时须在数值旁标注，不能静默转成“实际核实数”。
+交付同时报告全帧计算、时间线粗审、操作精审、候选完成与实际图片查看登记，并附工具核对记录。

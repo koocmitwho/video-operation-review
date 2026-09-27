@@ -1,4 +1,4 @@
-"""Omission-risk checks on recorded evidence. Never a proof that every semantic action was recovered."""
+"""基于记录与证据检查状态归属、操作衔接和复核进度。"""
 import hashlib
 import json
 import re
@@ -52,7 +52,7 @@ def check_aux_records(conn, data):
         if not all(_strings(entry.get(k)) for k in ['evidence', 'issue_ids', 'tool_trace_refs']):
             raise ValueError('Review evidence, issue_ids and tool_trace_refs must be string arrays.')
         if not entry['tool_trace_refs'] or not entry['evidence']:
-            raise ValueError('Review must cite actual image-tool calls and evidence; strings alone are not proof.')
+            raise ValueError('复核请引用实际图片工具调用及对应证据。')
         if entry.get('conclusion') not in {'no_additional_omissions_found', 'gaps_found', 'incomplete'}:
             raise ValueError('Invalid omission-review conclusion.')
 
@@ -223,7 +223,7 @@ class EvidenceAudit:
                 continue
             okay = self.evidence(entry['evidence'], f'coverage:{n}', context)
             if not self.full_state_evidence(entry['evidence'], n, actor=entry['reviewer']):
-                self.finding('state_full_view_missing', f'状态 {n} 缺少登记者本人对本精确重复段原图的查看记录，裁剪或其他人的登记不能代替。',
+                self.finding('state_full_view_missing', f'状态 {n} 请补充登记者本人对本精确重复段原图的查看记录。',
                              context, frame_no=n)
                 okay = False
             for ident in entry['step_ids']:
@@ -260,7 +260,7 @@ class EvidenceAudit:
             if ident not in linked:
                 self.finding('step_without_state', f'步骤 {ident} 尚未绑定到任何操作画面状态。', frames, 'continuity', step_id=ident)
             if not _nonempty(step.get('author')):
-                self.finding('step_author_missing', f'步骤 {ident} 缺少 author，不能检查复核者与作者是否相同。', frames, 'continuity', step_id=ident)
+                self.finding('step_author_missing', f'步骤 {ident} 请补充 author，以核对作者与复核者。', frames, 'continuity', step_id=ident)
             if step['status'] != 'confirmed' or step['uncertainties']:
                 self.finding('step_unresolved', f'步骤 {ident} 尚有未解决项或不是 confirmed。', frames, 'continuity', step_id=ident)
             if previous_step and step['start_frame'] < previous_step['end_frame']:
@@ -283,7 +283,7 @@ class EvidenceAudit:
                     self.evidence(fact['evidence'], f'{ident}.{phase}.{key}', frames, 'continuity')
                     value = fact['value']
                     if value is None:
-                        self.finding('state_value_unknown', f'步骤 {ident} 的 {key} 仍未知，不能据此声称状态衔接完整。', frames, 'continuity', step_id=ident)
+                        self.finding('state_value_unknown', f'步骤 {ident} 的 {key} 待确认，请补充前后状态证据。', frames, 'continuity', step_id=ident)
                         continue
                     if phase == 'before' and key in last_values and _canonical(last_values[key]['value']) != _canonical(value):
                         prior = last_values[key]
@@ -323,7 +323,7 @@ class EvidenceAudit:
         problems = len(self.findings)
         authors = {s.get('author') for s in self.steps.values()} | {e['reviewer'] for e in self.coverage.values()}
         if review['independence'] != 'independent' or review['reviewer'] in authors:
-            self.finding('reviewer_not_independent', '复核声明为自审或与记录作者同名；不能算作独立遗漏复核。', stage='review')
+            self.finding('reviewer_not_independent', '当前登记为自审或与作者同名；独立复核请填写对应审阅者。', stage='review')
         if set(review['checked_state_frames']) != set(self.states):
             unchecked = sorted(set(self.states) - set(review['checked_state_frames']))
             self.finding('review_scope_incomplete', '遗漏复核未明确覆盖全部不同连续画面状态。', unchecked, 'review')
@@ -355,11 +355,11 @@ def audit_omissions(conn, work, queue=False, base_validation=None, mode=None):
         return audit_layers(conn, work, queue, base_validation)
     if mode != 'strict':
         raise ValueError('Audit mode must be layered or strict.')
-    base = validate(conn, work) if base_validation is None else base_validation
+    base = validate(conn, work, _include_review=False) if base_validation is None else base_validation
     audit = EvidenceAudit(conn)
     s = base['status']
     if not base['valid']:
-        audit.finding('record_consistency_failed', '先修复记录、图片或引用校验错误；不能据此计算完成。',
+        audit.finding('record_consistency_failed', '请修复列出的记录、图片或引用校验错误。',
                       stage='records', validation_errors=base['errors'])
     if not s['full_compute_complete']:
         audit.finding('full_scan_incomplete', '全帧索引或计算尚未完整、干净结束。', stage='records',
@@ -393,6 +393,5 @@ def audit_omissions(conn, work, queue=False, base_validation=None, mode=None):
         'suggested_frames': suggested, 'records_ready_for_omission_review': ready,
         'omission_review': review, 'review_gate_passed_recorded': passed,
         'semantic_completeness_proven': False,
-        'assurance': 'Recorded state accounting, consistency and review attestations only. '
-                     'Names, traces and hashes do not prove independent agents, actual attention or semantic completeness.'
+        'assurance': '按当前记录核对状态归属、证据关联与复核范围。'
     }

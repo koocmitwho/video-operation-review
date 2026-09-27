@@ -1,5 +1,7 @@
 """Behavior tests against real FFmpeg and the public CLI; synthetic view events only."""
 import json
+import os
+import shutil
 from contextlib import closing
 from pathlib import Path
 import sqlite3
@@ -310,6 +312,127 @@ class ReviewContract(unittest.TestCase):
         self.cli('select')
         self.cli('extract', '--candidates')
         self.cli('validate')
+
+    def test_validate_reuses_scan_source_hash_and_rehashes_legacy_cache(self):
+        import vor_store as store
+        self.scan()
+        with store.database(self.work) as conn:
+            real_hash = store.sha256
+            with patch.object(store, 'sha256', wraps=real_hash) as hashed:
+                result = store.validate(conn, self.work)
+                self.assertTrue(result['valid'])
+                self.assertFalse(result.get('source_verification', {}).get('rehashed', True))
+                self.assertEqual(hashed.call_count, 0)
+            with conn:
+                conn.execute("DELETE FROM meta WHERE key='source_hash_cache'")
+            result = store.validate(conn, self.work)
+            self.assertTrue(result['valid'])
+            self.assertTrue(result['source_verification']['rehashed'])
+            self.assertFalse(store.validate(conn, self.work)['source_verification']['rehashed'])
+
+    def test_missing_source_fails_validation_and_is_retained_in_partial_export(self):
+        source = self.root / (self._testMethodName + '.mkv')
+        shutil.copyfile(self.cfr, source)
+        self.cli('scan', source)
+        source.rename(source.with_suffix('.moved'))
+        result = self.cli('validate', ok=False)
+        self.assertIn('source_missing', {e['code'] for e in result['errors']})
+        self.assertFalse(result['valid'])
+        exported = self.cli('export')
+        self.assertFalse(exported['validation_passed'])
+        data = json.loads((self.work / 'review.json').read_text(encoding='utf-8'))
+        self.assertFalse(data['validation']['valid'])
+        self.assertTrue((self.work / 'frames.jsonl').is_file())
+
+    def test_source_replacement_with_same_dimensions_and_frames_fails_validation(self):
+        source = self.root / (self._testMethodName + '.mkv')
+        shutil.copyfile(self.cfr, source)
+        self.cli('scan', source)
+        p = subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i',
+                            'color=c=red:s=160x90:r=8', '-frames:v', '8', '-c:v', 'ffv1', str(source)],
+                           capture_output=True, timeout=30)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        result = self.cli('validate', ok=False)
+        self.assertIn('source_hash_mismatch', {e['code'] for e in result['errors']})
+        self.assertTrue(result['source_verification']['rehashed'])
+
+    def test_same_size_source_edit_with_restored_mtime_is_detected(self):
+        source = self.root / (self._testMethodName + '.mkv')
+        shutil.copyfile(self.cfr, source)
+        self.cli('scan', source)
+        before = source.stat()
+        payload = bytearray(source.read_bytes())
+        payload[-1] ^= 1
+        source.write_bytes(payload)
+        os.utime(source, ns=(before.st_atime_ns, before.st_mtime_ns))
+        result = self.cli('validate', ok=False)
+        self.assertIn('source_hash_mismatch', {e['code'] for e in result['errors']})
+
+    def test_layered_selection_rejects_each_nondefault_threshold(self):
+        self.scan()
+        for option, value in [('--anchor-seconds', '3'), ('--global-threshold', '3'),
+                              ('--local-threshold', '0.2'), ('--min-changed-pixels', '2'),
+                              ('--context-frames', '0')]:
+            with self.subTest(option=option):
+                result = self.cli('select', '--mode', 'layered', option, value, ok=False)
+                self.assertIn('--mode coverage', result['error'])
+        self.cli('select', '--mode', 'layered')
+        config = json.loads(self.rows("SELECT value FROM meta WHERE key='selection_config'")[0]['value'])
+        self.assertEqual(config['mode'], 'layered')
+        self.assertEqual(config['max_span'], 15.0)
+        self.assertEqual(config['layout_fraction'], 0.12)
+        self.assertEqual(config['stable_seconds'], 0.75)
+
+    def test_record_view_rejects_asset_names_and_accepts_call_references(self):
+        self.scan()
+        asset = self.extract()
+        row = self.rows('SELECT * FROM assets ORDER BY frame_no')[0]
+        invalid = ['f000000004.png', 'photo.JPG', 'short-filename', row['path'], asset,
+                   str((self.work / row['path']).resolve())]
+        for trace in invalid:
+            with self.subTest(trace=trace):
+                result = self.cli('record-view', '--asset', asset, '--actor', 'test-only',
+                                  '--tool', 'read_image', '--trace', trace,
+                                  '--observation', '合成记账用例', ok=False)
+                self.assertIn('read_image#msg-42', result['error'])
+        self.assertEqual(self.cli('status')['view_events'], 0)
+        for trace in ['read_image#msg-42', 'session://abc/step-7', '/tmp/attach/xxx.png#L1']:
+            self.cli('record-view', '--asset', asset, '--actor', 'test-only',
+                     '--tool', 'read_image', '--trace', trace, '--observation', '合成记账用例')
+        self.assertEqual(self.cli('status')['view_events'], 3)
+
+    def test_partial_review_exports_record_integrity_and_review_progress_separately(self):
+        self.scan()
+        asset = self.extract()
+        self.record(asset)
+        result = self.cli('validate')
+        self.assertTrue(result['valid'])
+        self.assertIn('review_complete', result)
+        self.assertFalse(result['review_complete'])
+        exported = self.cli('export')
+        self.assertFalse(exported['review_complete'])
+        report = (self.work / 'report.md').read_text(encoding='utf-8')
+        self.assertIn('记录完整性', report)
+        self.assertIn('审阅完成度', report)
+        self.cli('validate', '--require-coverage', ok=False)
+
+    def test_validate_can_explicitly_rehash_unchanged_source(self):
+        self.scan()
+        result = self.cli('validate', '--rehash-source')
+        self.assertTrue(result['valid'])
+        self.assertTrue(result['source_verification']['rehashed'])
+
+    def test_public_messages_describe_work_and_progress(self):
+        self.scan()
+        self.extract()
+        self.cli('export')
+        help_text = subprocess.run([sys.executable, '-X', 'utf8', str(CLI), '--help'], capture_output=True,
+                                   text=True, encoding='utf-8', timeout=10).stdout
+        messages = help_text + (self.work / 'report.md').read_text(encoding='utf-8')
+        messages += json.dumps(self.cli('status'), ensure_ascii=False)
+        for phrase in ['cannot independently prove', 'not proof', 'not per-frame visual review',
+                       '差分可能漏掉操作', '不独立证明', '程序不能据此证明']:
+            self.assertNotIn(phrase, messages)
 
 
 if __name__ == '__main__':

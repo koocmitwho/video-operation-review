@@ -1,21 +1,109 @@
-"""Streaming FFmpeg media work. Ordinals stay in presentation order; no FPS-derived timestamps."""
+"""FFmpeg 流式媒体处理，按呈现顺序与原始时间戳索引。"""
 import hashlib
+from contextlib import contextmanager
 import json
 import math
 from functools import lru_cache
 from pathlib import Path
 import subprocess
+import threading
+import time
 
 import numpy as np
 from PIL import Image
 
 from vor_store import (asset_path, begin_attempt, dump, end_attempt, get_meta, log_history,
-                       now, require_asset, set_meta, sha256, status)
+                       now, require_asset, set_meta, sha256, source_file_identity, status)
 
 
-def process_options():
-    # Do not open visible console windows for helpers on Windows.
-    return {'creationflags': getattr(subprocess, 'CREATE_NO_WINDOW', 0)}
+PROBE_TIMEOUT = 30.0
+INDEX_TIMEOUT = 120.0
+MEDIA_TIMEOUT = 24 * 60 * 60.0
+
+
+class HelperTimeout(RuntimeError):
+    code = 'helper_timeout'
+
+    def __init__(self, command, timeout):
+        super().__init__(f'helper_timeout: 外部程序等待超过 {timeout:g} 秒：{command}')
+
+
+def process_options(timeout=30.0):
+    # Run Windows helpers in hidden console windows.
+    options = {'creationflags': getattr(subprocess, 'CREATE_NO_WINDOW', 0)}
+    if timeout is not None:
+        options['timeout'] = timeout
+    return options
+
+
+def run_helper(args, timeout=None, **kwargs):
+    timeout = PROBE_TIMEOUT if timeout is None else timeout
+    try:
+        return subprocess.run(args, **kwargs, **process_options(timeout))
+    except subprocess.TimeoutExpired as exc:
+        raise HelperTimeout(args[0], timeout) from exc
+
+
+def wait_helper(proc, timeout=None):
+    timeout = PROBE_TIMEOUT if timeout is None else timeout
+    try:
+        return proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        proc.kill()
+        proc.wait(timeout=PROBE_TIMEOUT)
+        raise HelperTimeout(proc.args[0], timeout) from exc
+
+
+def close_helper(proc):
+    if proc.poll() is None:
+        proc.kill()
+    try:
+        wait_helper(proc)
+    finally:
+        proc.stdout.close()
+
+
+@contextmanager
+def helper_deadline(proc, timeout):
+    """按输出进展计时，阻塞管道读取也由看护线程结束。"""
+    stopped, expired = threading.Event(), threading.Event()
+    last_output = [time.monotonic()]
+    def progress():
+        last_output[0] = time.monotonic()
+    def watch():
+        remaining = timeout
+        while not stopped.wait(max(0, remaining)):
+            remaining = timeout - (time.monotonic() - last_output[0])
+            if remaining <= 0:
+                if proc.poll() is None:
+                    expired.set()
+                    try:
+                        proc.kill()
+                    except OSError:
+                        pass
+                return
+    watcher = threading.Thread(target=watch, name='vor-helper-timeout', daemon=True)
+    watcher.start()
+    try:
+        yield progress
+    finally:
+        stopped.set()
+        watcher.join(timeout=2)
+        if expired.is_set():
+            raise HelperTimeout(proc.args[0], timeout)
+
+
+@contextmanager
+def helper_attempt(conn, kind):
+    attempt = begin_attempt(conn, kind)
+    try:
+        yield
+    except BaseException as exc:
+        end_attempt(conn, attempt, 'interrupted' if isinstance(exc, KeyboardInterrupt) else 'failed',
+                    error=str(exc) or type(exc).__name__)
+        raise
+    else:
+        end_attempt(conn, attempt, 'complete')
 
 
 def finite_float(value):
@@ -27,27 +115,24 @@ def finite_float(value):
 
 
 def version(executable):
-    p = subprocess.run([executable, '-version'], capture_output=True, **process_options())
+    p = run_helper([executable, '-version'], capture_output=True)
     if p.returncode:
         raise RuntimeError(f'{executable} version check failed')
     return p.stdout.decode('utf-8', errors='replace').splitlines()[0]
 
 
 def source_identity(video):
-    video = Path(video).resolve(strict=True)
-    if not video.is_file():
-        raise ValueError('Video must be a local file.')
-    stat = video.stat()
-    return {'path': str(video), 'size': stat.st_size, 'sha256': sha256(video)}
+    return source_file_identity(video)[0]
 
 
 def bind_source(conn, video):
-    source = source_identity(video)
+    source, cache, _ = source_file_identity(video, get_meta(conn, 'source_hash_cache'))
     old = get_meta(conn, 'source')
     if old and (old['sha256'] != source['sha256'] or old['size'] != source['size']):
         raise ValueError('Source content differs from cached review. Use a new --work directory.')
     with conn:
         set_meta(conn, 'source', source)
+        set_meta(conn, 'source_hash_cache', cache)
     return source
 
 
@@ -62,9 +147,9 @@ def index_video(conn, work, video, ffprobe='ffprobe', checkpoint=100):
     proc = None
     try:
         with (work / log_rel).open('wb') as log:
-            meta = subprocess.run([ffprobe, '-v', 'error', '-select_streams', 'v:0', '-show_streams',
+            meta = run_helper([ffprobe, '-v', 'error', '-select_streams', 'v:0', '-show_streams',
                                    '-show_format', '-of', 'json', str(video)],
-                                  stdout=subprocess.PIPE, stderr=log, **process_options())
+                              stdout=subprocess.PIPE, stderr=log)
             if meta.returncode:
                 raise RuntimeError('ffprobe metadata failed; see index log.')
             media = json.loads(meta.stdout)
@@ -81,45 +166,47 @@ def index_video(conn, work, video, ffprobe='ffprobe', checkpoint=100):
                        'width,height,key_frame,duration_time')
             proc = subprocess.Popen([ffprobe, '-v', 'error', '-select_streams', 'v:0',
                                      '-show_frames', '-show_entries', entries, '-of', 'compact=p=0:nk=0', str(video)],
-                                    stdout=subprocess.PIPE, stderr=log, **process_options())
-            previous_time = None
-            anomalies = {'missing_pts': 0, 'missing_all_time': 0, 'non_increasing_time': 0}
-            for raw in proc.stdout:
-                values = {}
-                for part in raw.decode('utf-8', errors='replace').strip().split('|'):
-                    if '=' in part:
-                        k, v = part.split('=', 1)
-                        values[k] = None if v in {'N/A', ''} else v
-                if 'width' not in values or 'height' not in values:
-                    continue  # ffprobe may emit separate side-data lines, not additional frames.
-                pts_time = finite_float(values.get('pts_time'))
-                best = finite_float(values.get('best_effort_timestamp_time'))
-                t = pts_time if pts_time is not None else best
-                source = 'pts' if pts_time is not None else ('best_effort' if best is not None else 'missing')
-                if pts_time is None:
-                    anomalies['missing_pts'] += 1
-                if t is None:
-                    anomalies['missing_all_time'] += 1
-                elif previous_time is not None and t <= previous_time:
-                    anomalies['non_increasing_time'] += 1
-                if t is not None:
-                    previous_time = t
-                data = (count, values.get('pts'), values.get('pts_time'), values.get('best_effort_timestamp'),
-                        values.get('best_effort_timestamp_time'), t, source, int(values['width']),
-                        int(values['height']), int(values.get('key_frame') or 0), values.get('duration_time'))
-                existing = conn.execute('SELECT frame_no,pts,pts_time,best_effort_timestamp,best_effort_time,'
-                                        'time_s,time_source,width,height,key_frame,duration_time '
-                                        'FROM frames WHERE frame_no=?', (count,)).fetchone()
-                if existing and tuple(existing) != data:
-                    raise ValueError(f'Index replay mismatch at frame {count}; use a fresh review directory.')
-                conn.execute('INSERT OR IGNORE INTO frames(frame_no,pts,pts_time,best_effort_timestamp,'
-                             'best_effort_time,time_s,time_source,width,height,key_frame,duration_time) '
-                             'VALUES (?,?,?,?,?,?,?,?,?,?,?)', data)
-                count += 1
-                if count % checkpoint == 0:
-                    conn.execute('UPDATE attempts SET decoded_frames=? WHERE id=?', (count, attempt))
-                    conn.commit()
-            code = proc.wait()
+                                    stdout=subprocess.PIPE, stderr=log, **process_options(timeout=None))
+            with helper_deadline(proc, INDEX_TIMEOUT) as progress:
+                previous_time = None
+                anomalies = {'missing_pts': 0, 'missing_all_time': 0, 'non_increasing_time': 0}
+                for raw in proc.stdout:
+                    progress()
+                    values = {}
+                    for part in raw.decode('utf-8', errors='replace').strip().split('|'):
+                        if '=' in part:
+                            k, v = part.split('=', 1)
+                            values[k] = None if v in {'N/A', ''} else v
+                    if 'width' not in values or 'height' not in values:
+                        continue  # ffprobe may emit separate side-data lines, not additional frames.
+                    pts_time = finite_float(values.get('pts_time'))
+                    best = finite_float(values.get('best_effort_timestamp_time'))
+                    t = pts_time if pts_time is not None else best
+                    source = 'pts' if pts_time is not None else ('best_effort' if best is not None else 'missing')
+                    if pts_time is None:
+                        anomalies['missing_pts'] += 1
+                    if t is None:
+                        anomalies['missing_all_time'] += 1
+                    elif previous_time is not None and t <= previous_time:
+                        anomalies['non_increasing_time'] += 1
+                    if t is not None:
+                        previous_time = t
+                    data = (count, values.get('pts'), values.get('pts_time'), values.get('best_effort_timestamp'),
+                            values.get('best_effort_timestamp_time'), t, source, int(values['width']),
+                            int(values['height']), int(values.get('key_frame') or 0), values.get('duration_time'))
+                    existing = conn.execute('SELECT frame_no,pts,pts_time,best_effort_timestamp,best_effort_time,'
+                                            'time_s,time_source,width,height,key_frame,duration_time '
+                                            'FROM frames WHERE frame_no=?', (count,)).fetchone()
+                    if existing and tuple(existing) != data:
+                        raise ValueError(f'Index replay mismatch at frame {count}; use a fresh review directory.')
+                    conn.execute('INSERT OR IGNORE INTO frames(frame_no,pts,pts_time,best_effort_timestamp,'
+                                 'best_effort_time,time_s,time_source,width,height,key_frame,duration_time) '
+                                 'VALUES (?,?,?,?,?,?,?,?,?,?,?)', data)
+                    count += 1
+                    if count % checkpoint == 0:
+                        conn.execute('UPDATE attempts SET decoded_frames=? WHERE id=?', (count, attempt))
+                        conn.commit()
+                code = wait_helper(proc)
             log.flush()
             if code or (work / log_rel).stat().st_size:
                 raise RuntimeError(f'ffprobe did not finish cleanly (exit {code}); see {log_rel}.')
@@ -137,10 +224,7 @@ def index_video(conn, work, video, ffprobe='ffprobe', checkpoint=100):
         raise
     finally:
         if proc:
-            if proc.poll() is None:
-                proc.kill()
-            proc.wait()
-            proc.stdout.close()
+            close_helper(proc)
 
 
 def token(stream):
@@ -180,10 +264,9 @@ def read_ppm(stream):
 @lru_cache(maxsize=16)
 def _filter_file_option(ffmpeg):
     """Keep large graphs in files across legacy and current FFmpeg interfaces."""
-    probe = subprocess.run([ffmpeg, '-hide_banner', '-h', 'full'],
-                           capture_output=True, timeout=10, **process_options())
+    probe = run_helper([ffmpeg, '-hide_banner', '-h', 'full'], capture_output=True, timeout=10)
     if probe.returncode:
-        raise RuntimeError(f'Cannot inspect FFmpeg filter-file options (exit {probe.returncode}).')
+        raise RuntimeError(f'FFmpeg 滤镜参数探测失败（退出码 {probe.returncode}）。')
     # Older FFmpeg lacks generic file-backed options; newer versions removed
     # filter_script. Detect the installed interface instead of parsing versions.
     legacy = any(line.startswith(b'-filter_script') for line in probe.stdout.splitlines())
@@ -199,7 +282,7 @@ def decoder(video, ffmpeg, log, filter_file=None, count=None):
     if count is not None:
         args += ['-frames:v', str(count)]
     args += ['-f', 'image2pipe', 'pipe:1']
-    return subprocess.Popen(args, stdout=subprocess.PIPE, stderr=log, **process_options())
+    return subprocess.Popen(args, stdout=subprocess.PIPE, stderr=log, **process_options(timeout=None))
 
 
 def pixel_digest(array):
@@ -233,9 +316,11 @@ def scan(conn, work, video, ffmpeg='ffmpeg', ffprobe='ffprobe', tile_size=32,
     if max_new_frames is not None and max_new_frames < 1:
         raise ValueError('max_new_frames must be positive when given.')
     source = bind_source(conn, video)
+    with helper_attempt(conn, 'probe'):
+        ffmpeg_version = version(ffmpeg)
     config = {'tile_size': tile_size, 'pixel_threshold': pixel_threshold,
               'pixel_format': 'rgb24', 'autorotate': False, 'video_stream': 'v:0',
-              'ffmpeg_version': version(ffmpeg)}
+              'ffmpeg_version': ffmpeg_version}
     old_config = get_meta(conn, 'scan_config')
     if old_config and old_config != config:
         raise ValueError('Computation configuration/version differs. Use a new --work directory.')
@@ -256,39 +341,41 @@ def scan(conn, work, video, ffmpeg='ffmpeg', ffprobe='ffprobe', tile_size=32,
     try:
         with (work / log_rel).open('wb') as log:
             proc = decoder(source['path'], ffmpeg, log)
-            while True:
-                array = read_ppm(proc.stdout)
-                if array is None:
-                    break
-                n = decoded
-                decoded += 1
-                row = conn.execute('SELECT * FROM frames WHERE frame_no=?', (n,)).fetchone()
-                if row is None or (row['height'], row['width']) != array.shape[:2]:
-                    raise ValueError(f'Decode/index alignment failed at frame {n}.')
-                digest = pixel_digest(array)
-                if digest != previous_digest:
-                    exact_start = n
-                if row['digest'] is not None:
-                    if row['digest'] != digest:
-                        raise ValueError(f'Decoder replay pixel mismatch at frame {n}.')
-                else:
-                    overall, local, pixels, fraction, tiles = metrics(previous, array, tile_size, pixel_threshold)
-                    conn.execute('UPDATE frames SET digest=?,exact_start=?,global_delta=?,max_local_delta=?,'
-                                 'changed_pixels=?,changed_fraction=?,tiles=? WHERE frame_no=?',
-                                 (digest, exact_start, overall, local, pixels, fraction, dump(tiles), n))
-                    new += 1
-                previous, previous_digest = array, digest
-                if decoded % checkpoint == 0:
-                    conn.execute('UPDATE attempts SET decoded_frames=?,new_frames=? WHERE id=?', (decoded, new, attempt))
-                    conn.commit()
-                # At the indexed tail, consume EOF and check the real exit/log instead
-                # of killing a decoder that may still report a final error.
-                if max_new_frames is not None and new >= max_new_frames and decoded < total_frames:
-                    state = 'paused_budget'
-                    break
-            if state == 'paused_budget':
-                proc.kill()
-            code = proc.wait()
+            with helper_deadline(proc, MEDIA_TIMEOUT) as progress:
+                while True:
+                    array = read_ppm(proc.stdout)
+                    progress()
+                    if array is None:
+                        break
+                    n = decoded
+                    decoded += 1
+                    row = conn.execute('SELECT * FROM frames WHERE frame_no=?', (n,)).fetchone()
+                    if row is None or (row['height'], row['width']) != array.shape[:2]:
+                        raise ValueError(f'Decode/index alignment failed at frame {n}.')
+                    digest = pixel_digest(array)
+                    if digest != previous_digest:
+                        exact_start = n
+                    if row['digest'] is not None:
+                        if row['digest'] != digest:
+                            raise ValueError(f'Decoder replay pixel mismatch at frame {n}.')
+                    else:
+                        overall, local, pixels, fraction, tiles = metrics(previous, array, tile_size, pixel_threshold)
+                        conn.execute('UPDATE frames SET digest=?,exact_start=?,global_delta=?,max_local_delta=?,'
+                                     'changed_pixels=?,changed_fraction=?,tiles=? WHERE frame_no=?',
+                                     (digest, exact_start, overall, local, pixels, fraction, dump(tiles), n))
+                        new += 1
+                    previous, previous_digest = array, digest
+                    if decoded % checkpoint == 0:
+                        conn.execute('UPDATE attempts SET decoded_frames=?,new_frames=? WHERE id=?', (decoded, new, attempt))
+                        conn.commit()
+                    # At the indexed tail, consume EOF and check the real exit/log instead
+                    # of killing a decoder that may still report a final error.
+                    if max_new_frames is not None and new >= max_new_frames and decoded < total_frames:
+                        state = 'paused_budget'
+                        break
+                if state == 'paused_budget':
+                    proc.kill()
+                code = wait_helper(proc)
             log.flush()
             if state == 'complete' and (code or (work / log_rel).stat().st_size):
                 raise RuntimeError(f'FFmpeg decode failed/degraded (exit {code}); see {log_rel}.')
@@ -305,10 +392,7 @@ def scan(conn, work, video, ffmpeg='ffmpeg', ffprobe='ffprobe', tile_size=32,
         raise
     finally:
         if proc:
-            if proc.poll() is None:
-                proc.kill()
-            proc.wait()
-            proc.stdout.close()
+            close_helper(proc)
     return status(conn)
 
 
@@ -320,7 +404,7 @@ def compact_select(numbers):
         else:
             spans.append([n, n])
     terms = [f'eq(n\\,{a})' if a == b else f'between(n\\,{a}\\,{b})' for a, b in spans]
-    # FFmpeg's expression parser cannot handle a long left-deep sum. Pair terms
+    # Keep the FFmpeg expression tree shallow. Pair terms
     # into a balanced tree while keeping consecutive ranges compact.
     while len(terms) > 1:
         terms = [f'({terms[i]}+{terms[i + 1]})' if i + 1 < len(terms) else terms[i]
@@ -355,30 +439,31 @@ def extract(conn, work, frames, ffmpeg='ffmpeg'):
     try:
         with (work / log_rel).open('wb') as log:
             proc = decoder(source['path'], ffmpeg, log, filter_file, len(missing))
-            for n in missing:
-                array = read_ppm(proc.stdout)
-                if array is None:
-                    # stdout reached EOF, so waiting cannot block on an unread
-                    # output pipe. Pixel mismatches take the kill/cleanup path.
-                    code = proc.wait()
-                    log.flush()
-                    if code or (work / log_rel).stat().st_size:
-                        raise RuntimeError(f'Extraction failed/degraded (exit {code}); see {log_rel}.')
-                    raise ValueError(f'Extraction ended before requested frame {n}; see {log_rel}.')
-                row = conn.execute('SELECT digest FROM frames WHERE frame_no=?', (n,)).fetchone()
-                if pixel_digest(array) != row[0]:
-                    raise ValueError(f'Extracted frame {n} does not match stored full-resolution pixel digest.')
-                ident = f'f{n:09d}'
-                relative = f'evidence/{ident}.png'
-                path = asset_path(work, relative)
-                temp = path.with_suffix('.png.tmp')
-                Image.fromarray(array).save(temp, format='PNG')
-                temp.replace(path)
-                with conn:
-                    conn.execute('INSERT INTO assets VALUES (?,?,?,?,?,?,?,?)',
-                                 (ident, n, 'full', relative, sha256(path), None, None, now()))
-                done += 1
-            code = proc.wait()
+            with helper_deadline(proc, MEDIA_TIMEOUT) as progress:
+                for n in missing:
+                    array = read_ppm(proc.stdout)
+                    progress()
+                    if array is None:
+                        # At stdout EOF, check the decoder exit and retained log.
+                        code = wait_helper(proc)
+                        log.flush()
+                        if code or (work / log_rel).stat().st_size:
+                            raise RuntimeError(f'Extraction failed/degraded (exit {code}); see {log_rel}.')
+                        raise ValueError(f'Extraction ended before requested frame {n}; see {log_rel}.')
+                    row = conn.execute('SELECT digest FROM frames WHERE frame_no=?', (n,)).fetchone()
+                    if pixel_digest(array) != row[0]:
+                        raise ValueError(f'Extracted frame {n} does not match stored full-resolution pixel digest.')
+                    ident = f'f{n:09d}'
+                    relative = f'evidence/{ident}.png'
+                    path = asset_path(work, relative)
+                    temp = path.with_suffix('.png.tmp')
+                    Image.fromarray(array).save(temp, format='PNG')
+                    temp.replace(path)
+                    with conn:
+                        conn.execute('INSERT INTO assets VALUES (?,?,?,?,?,?,?,?)',
+                                     (ident, n, 'full', relative, sha256(path), None, None, now()))
+                    done += 1
+                code = wait_helper(proc)
             log.flush()
             if code or (work / log_rel).stat().st_size:
                 raise RuntimeError(f'Extraction failed/degraded (exit {code}); see {log_rel}.')
@@ -389,10 +474,7 @@ def extract(conn, work, frames, ffmpeg='ffmpeg'):
         raise
     finally:
         if proc:
-            if proc.poll() is None:
-                proc.kill()
-            proc.wait()
-            proc.stdout.close()
+            close_helper(proc)
     return {'extracted_new': done, 'assets': [f'f{n:09d}' for n in numbers]}
 
 
