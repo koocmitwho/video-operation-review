@@ -27,3 +27,9 @@ frames.jsonl
 omission-audit.json
 report.md
 evidence/
+
+# The authored synthetic demonstration is part of the distributable skill.
+!examples/tutorial/report.md
+!examples/tutorial/tutorial.mkv
+!examples/tutorial/evidence/
+!examples/tutorial/evidence/*.png

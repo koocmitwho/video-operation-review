@@ -614,72 +614,15 @@ def export_records(conn, work, force_source_hash=False):
                 entry['tiles'] = json.loads(entry['tiles'])
             f.write(dump(entry) + '\n')
     temp.replace(work / 'frames.jsonl')
-    s = report['status']
-    lines = ['# 软件操作录屏审阅', '', '本报告汇总操作记录、画面证据、查看登记和当前审阅进度。', '',
-             '| 统计 | 当前记录 |', '|---|---|',
-             f"| 容器声明帧数 | {s['container_declared_frames']} |",
-             f"| 已索引的可解码呈现帧数 | {s['video_total_frames']} |",
-             f"| 容器声明与解码计数不一致（null/None 表示尚不可比较） | {s['container_frame_count_mismatch']} |",
-             f"| 程序计算检查 | {s['computed_frames']} |",
-             f"| 粗审覆盖 / 精审覆盖（登记源帧范围长度） | {s['coarse_reviewed_frames_recorded']} / {s['fine_reviewed_frames_recorded']} |",
-             f"| 已进行精审 / 已完成精审（区间帧数） | {s['fine_examined_frames_recorded']} / {s['fine_reviewed_frames_recorded']} |",
-             f"| 候选操作单元 | {s['candidate_operation_units']} |",
-             f"| 概览粒度去重源帧 | {s['recorded_overview_unique_frames']} |",
-             f"| 候选帧 / 已登记查看 / 待查看 | {s['candidate_frames']} / {s['candidates_reviewed_recorded']} / {s['candidates_pending']} |",
-             f"| 模型视觉查看去重源帧（登记口径） | {s['recorded_visual_unique_frames']} |",
-             f"| 全帧计算完成（可解码呈现帧口径） | {s['full_compute_complete']} |",
-             f"| 选定候选审阅完成（登记口径） | {s['selected_candidates_review_complete_recorded']} |",
-             '| 全部帧逐张视觉审阅完成（独立核实） | 未核实 |', '',
-             f"未计算范围：{dump(s['unprocessed_ranges'])}；未索引尾部：{dump(s['unindexed_tail'])}。", '',
-             f"待补充全图查看登记的源帧：{dump(s['source_frames_without_full_view_record_ranges'])}。", '',
-             '## 操作步骤', '']
-    for item in report['steps']:
-        step = item['payload']
-        bounds = [conn.execute('SELECT time_s FROM frames WHERE frame_no=?', (step[k],)).fetchone()[0]
-                  if conn.execute('SELECT 1 FROM frames WHERE frame_no=?', (step[k],)).fetchone() else None
-                  for k in ['start_frame', 'end_frame']]
-        lines.extend([f"### {step['id']} · {step['phase']} · {step['status']}", '',
-                      f"原始时间 {bounds[0]}–{bounds[1]} s；源帧 {step['start_frame']}–{step['end_frame']}。", ''])
-        for label, key in [('软件', 'software'), ('模块', 'module'), ('菜单入口', 'menu_path'),
-                           ('选择对象', 'selected_objects'), ('最终参数', 'final_parameters'),
-                           ('确认动作', 'confirmation_action'), ('可见结果', 'visible_result'),
-                           ('输入文件', 'input_files'), ('输出文件', 'output_files'), ('不确定项', 'uncertainties')]:
-            value = step[key]
-            lines.append(f'- {label}：{dump(value) if isinstance(value, (dict, list)) else value}')
-        lines.append('')
-        for ident in step['evidence']:
-            asset = next((a for a in report['assets'] if a['id'] == ident), None)
-            if asset:
-                lines.extend([f"![{ident}]({asset['path']})", ''])
-    lines += ['## 待核对事项', '']
-    for issue in s['unresolved_issues']:
-        lines += [f"- {issue['id']}：{issue['question']}（{issue['status']}）"]
+    from functools import lru_cache
+    from vor_report import render_report
+    @lru_cache(maxsize=4096)
+    def frame_details(frame_no):
+        row = conn.execute('SELECT frame_no,pts_time,best_effort_time,time_s,time_source '
+                           'FROM frames WHERE frame_no=?', (frame_no,)).fetchone()
+        return dict(row) if row else None
+    atomic_text(work / 'report.md', render_report(report, work, frame_details))
     audit = report['coverage_audit']
-    if audit.get('mode') == 'layered':
-        lines += ['', '## 分层覆盖', '',
-                  f"尚未粗审范围：{dump(s['not_coarse_reviewed_ranges'])}；尚未进行精审：{dump(s['not_fine_examined_ranges'])}；尚未完成精审：{dump(s['not_fine_reviewed_ranges'])}。", '',
-                  f"复核状态：{audit['omission_review']['status']}；记录层检查通过：{audit['review_gate_passed_recorded']}。", '',
-                  '区间、原始帧/状态映射、合并理由、抽查与字幕线索保存在 review.json；查看数量来自图片调用登记。', '']
-        for item in report['intervals']:
-            entry = item['payload']
-            lines.append(f"- {entry['id']} 帧 {entry['start_frame']}–{entry['end_frame']}：{entry['phase']}；{entry['disposition']}；{entry['merge']}；精审 {entry['fine_status']}；{entry['reason']}")
-    else:
-        lines += ['', '## 操作遗漏检查', '',
-              f"不同连续画面状态：{audit['coverage']['state_count']}；有依据的状态说明：{len(audit['coverage']['accounted_state_frames'])}。", '',
-              f"可进入遗漏复核：{audit['records_ready_for_omission_review']}；复核状态：{audit['omission_review']['status']}。", '',
-              f"记录层遗漏检查通过：{audit['review_gate_passed_recorded']}。", '',
-                  f"未说明状态的代表帧：{dump(audit['coverage']['unaccounted_state_frames'])}。", '']
-    lines += [f"- {f['code']}：{f['message']}（建议复查帧 {dump(f['suggested_frames'])}）" for f in audit['findings']] or ['- 当前记录检查就绪。']
-    result = report['validation']
-    lines += ['', '## 记录校验与审阅完成度', '',
-              f"记录完整性：{'通过' if result['valid'] else '待修复'}（源文件、证据哈希与引用）。", '',
-              f"审阅完成度：{'已完成' if result['review_complete'] else '待完成'}（候选查看及当前模式复核门禁）。", '',
-              f"源身份检查：{result['source_verification']['method']}；本次重新哈希：{result['source_verification']['rehashed']}。", '',
-              '错误：', '']
-    lines += [f"- {e['code']} · {e['reference']}：{e['message']}" for e in result['errors']] or ['- 无。']
-    lines += ['', '警告：', '']
-    lines += [f'- {warning}' for warning in result['warnings']] or ['- 无。']
-    atomic_text(work / 'report.md', '\n'.join(lines) + '\n')
     return {'review_json': str(work / 'review.json'), 'frames_jsonl': str(work / 'frames.jsonl'),
             'report': str(work / 'report.md'), 'omission_audit': str(work / 'omission-audit.json'),
             'validation_passed': report['validation']['valid'],

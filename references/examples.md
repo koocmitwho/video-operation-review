@@ -1,6 +1,6 @@
 # 可执行命令与阶段审阅示例
 
-按顺序准备环境、查看证据、登记观察和导出。路径作为独立参数传递。
+本页供代理执行和调试。代理按顺序准备环境、查看证据、登记观察和导出，用户提供视频与问题即可。路径、工具引用和 JSON 记录均由代理填写；路径作为独立参数传递。用户说明与继续回执见 [delivery.md](delivery.md)。
 
 从任意工作目录可运行；技能安装位置不同时修改 `$skillRoot`。视频与审阅目录使用本轮实际绝对路径。
 
@@ -52,6 +52,8 @@ $ReviewWork = 'D:\video-reviews\tutorial'
 
 ## 暂停与恢复
 
+以下新增帧预算演示已有接口，不是每轮默认限制。用户指定预算时才按其要求安排；恢复前先读取已有状态，确认没有活动写入者，不新建另一份相同视频的审阅库。
+
 ```powershell
 & $pythonExe -X utf8 $reviewCli scan $VideoInput --work $ReviewWork --max-new-frames 500
 & $pythonExe -X utf8 $reviewCli status --work $ReviewWork
@@ -61,10 +63,12 @@ $ReviewWork = 'D:\video-reviews\tutorial'
 
 `--max-new-frames` 是本次新增计算预算。恢复时回放已缓存前缀并复用差分和审阅记录。恰好达到索引末帧时检查实际 EOF、退出码和日志后标记完成。Ctrl+C 或外部终止后先检查 `status` 和 attempts，再继续扫描。
 
+阶段结束或暂停后，代理根据这些状态说明已完成内容和下一步，给出实际审阅目录及继续回执。长命令未返回时说明当前阶段；这些命令提供状态快照，不提供实时百分比。全帧计算已完成时直接继续剩余审阅。
+
 ## 汇总与导出
 
 ```powershell
-& $pythonExe -X utf8 $reviewCli import-records 'D:ideo-reviewsnnotations.json' --work $ReviewWork
+& $pythonExe -X utf8 $reviewCli import-records 'D:\video-reviews\annotations.json' --work $ReviewWork
 & $pythonExe -X utf8 $reviewCli validate --work $ReviewWork
 & $pythonExe -X utf8 $reviewCli audit --work $ReviewWork --summary
 & $pythonExe -X utf8 $reviewCli validate --work $ReviewWork --require-coverage
@@ -77,4 +81,6 @@ $ReviewWork = 'D:\video-reviews\tutorial'
 
 调用示例：
 
-> 请使用 `$video-operation-review` 审阅本轮软件录屏，生成可照做的步骤、关键截图和待核对项，分别报告全帧计算、粗审、精审和去重查看源帧。
+> 请使用 `$video-operation-review` 审阅本轮软件录屏，给出可照做的步骤、各对象的最终参数、关键截图和仍需确认的地方。
+
+完整交付样式见 [软件教程示例](../examples/tutorial/report.md)。用户交付先给操作说明，覆盖统计和底层记录置于其后。

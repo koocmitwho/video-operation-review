@@ -26,9 +26,10 @@
 - 可调用的 FFmpeg 与 ffprobe，FFmpeg 需支持 `-fps_mode passthrough`。
 - 用于语义审阅的宿主助手需要能读取文件、执行本地命令，并实际查看图片。
 
-模型和当前宿主都需支持实际图片输入。
+模型和当前宿主都需支持实际图片输入；不支持图像输入的纯文本模型无法完成审阅。
 
 已在 Windows 上验证 Python 3.10.11 与 Python 3.12.10，使用 FFmpeg 8.1.2。
+当前覆盖单视频流与常见 8-bit 编码；高位深、动态分辨率和其他平台组合未验证。
 
 如需安装 Python 依赖，建议在自己的虚拟环境中执行：
 
@@ -68,7 +69,7 @@ DeepSeek Harness 需要已启用本地 skill 发现与加载。该仓库按文�
 
 ### 先检查环境
 
-从仓库根目录运行；安装为技能后请按 [hosts.md](references/hosts.md) 改用绝对路径：
+这一步由执行技能的代理完成。从仓库根目录运行；安装为技能后按 [hosts.md](references/hosts.md) 改用绝对路径：
 
 ```text
 python scripts/review_video.py doctor
@@ -88,17 +89,21 @@ python scripts/review_video.py doctor
 
 新旧型号的具体策略、图片清晰度和能力检查见 [模型适配说明](references/models.md)。型号兼容规则与实际验收结果分别记录。
 
-### 让 AI 助手执行审阅
+### 由你的代理执行审阅
 
-下载或克隆本仓库后，可以向能访问该目录的助手提出：
+安装后，向能访问视频的 AI 助手明确调用技能：
 
-> 请按照本目录 `SKILL.md` 的 video-operation-review 流程审阅这段软件教程。先检查已有结果，再做完整索引、分层粗审和关键操作精审。交付可复现的步骤、关键证据及未解决项，分别报告计算覆盖、审阅覆盖和实际看图数量。
+> 请使用 `$video-operation-review` 审阅这段软件教程，给出可以照做的步骤、各对象的最终参数、关键截图和仍需确认的地方。
 
-技能入口是 [SKILL.md](SKILL.md)。未安装到发现目录时，也可直接让助手读取该文件。宿主从其他工作目录调用时，使用脚本的绝对路径，并为输入视频和 `--work` 明确指定位置。
+技能入口是 [SKILL.md](SKILL.md)。未安装到发现目录时，也可直接让助手读取该文件。它负责环境检查、选择工作目录、运行脚本、实际看图、记录与导出；用户无需学习命令或填写 JSON。已有素材、范围和模型设置会继续使用，时间或用量预算可按需要提出。
+
+代理优先复用已有审阅目录；新工作使用你指定的位置，否则放在当前任务可写目录中的 `video-reviews/<视频名>/`，并告诉你实际路径。阶段反馈说明已核对的内容与下一步；暂停时给出结果位置和可交给新聊天的继续回执。恢复沿用已有记录，缓存前缀回放仍可能需要时间。
+
+最终说明先列可复现步骤、按对象与阶段整理的最终参数、关键截图和关联时间的疑点，再附覆盖统计与记录。参见 [完整交付示例](examples/tutorial/report.md) 和 [进度、恢复与交付指引](references/delivery.md)。
 
 ### 使用命令行准备证据
 
-下面从仓库根目录运行，将输入文件替换为自己的视频。`--work` 应为这个视频专用的审阅目录。
+以下是供代理调用及调试的命令参考。从仓库根目录运行，将输入文件替换为本轮视频；从其他工作目录调用时使用脚本绝对路径。`--work` 应为这个视频专用的审阅目录。
 
 ```text
 python scripts/review_video.py --help
@@ -124,7 +129,9 @@ python scripts/review_video.py transcript ./input/speech.json --work ./work/tuto
 
 字幕按“字幕时间 + 显式偏移”对齐原始视频时间；转写 JSON 必须声明时间基准。
 
-字幕与已有转写的输入、对齐和扩展接口见 [语言、音频与字幕](references/language.md)。
+本技能不做语音识别、OCR 推理和自动翻译：转写由外部 ASR 适配器产出后以 JSON 导入，没有现成字幕的音频不会被自动转写。接口与依赖见 [语言、音频与字幕](references/language.md)。
+
+代理会说明本次是否利用了旁白及所用来源；只有音轨而没有转写时，报告明确标注“旁白未转写”。
 
 ### 校验与导出
 
@@ -149,6 +156,7 @@ python scripts/review_video.py export --work ./work/tutorial
 | `evidence/` | 按需导出的原图、裁剪和概览拼图 |
 
 输入视频、审阅数据库和证据可能包含使用者自己的内容。它们应保存在各自工作目录。
+每个 `--work` 由一个记录者串行写入；多位审阅者各自产出记录后按 ID 导入。
 
 ## 如何理解覆盖统计
 
@@ -161,9 +169,11 @@ python scripts/review_video.py export --work ./work/tutorial
 
 同一源帧的原图、裁剪、放大和拼图面板按源帧去重；拼图与原尺寸证据的粒度分别记录。
 
-查看登记仍需与真实工具调用核对。审计通过表示记录满足检查规则。
+审计核对记录一致性与区间覆盖；查看登记是自报值，不构成独立核实。
 
 ## 验证情况
+
+2026-09-29 完成代理执行指引与报告交付改进。Windows / Python 3.12.10、3.10.11 各运行 145 项检查，均无失败；主目录各跳过 1 项 Git 索引检查，已在发布副本的 15 项文档检查中补验。最后的疑点影响展示修补另在两套环境通过 12 项报告用例。三位代理分别审阅同一真实录屏的 8、26、38 秒片段，共计算 1368 帧、实际调用图片工具 138 次，按各片段源身份去重为 128 帧；三份记录完整性通过，保留 6 个素材或交接疑点，完整审阅门禁未通过。结果见 [本轮验收摘要](validation/agent-delivery-20260929.json)；可直接打开 [自建交付示例](examples/tutorial/report.md)。
 
 2026-09-27 修复后，Windows / Python 3.12.10 与 3.10.11 **均通过 132 项测试（新增 34 项）**，串行运行耗时分别为 93.525 秒、135.805 秒。日志：[Python 3.12](validation/tests-fixes-20260927.log)、[Python 3.10](validation/tests-fixes-python310-20260927.log)。`doctor` 与合成 GUI 手工端到端通过；[修复摘要](validation/fixes-20260927.json) 保存本轮结果。
 
@@ -179,11 +189,13 @@ python -X utf8 -m unittest discover -s scripts/tests -v
 
 一次 32 帧合成教程试用中，分层方式实际显示了 18 个不同源帧，严格方式为 32 个；两者均记录了 [预设关键状态 9 项](validation/layered-trial-truth.json)（原试用汇总），最终参数错误为 0。
 
-2026-09-25 在 Windows 上完成两边的技能加载检查，以及 DeepSeek Harness `deepseek-flash` 的实际视觉审阅：对另一段 32 帧合成录屏完成全帧索引、看图、操作记录、校验和导出。55 次成功图片调用覆盖 32 张原图、22 张裁剪和 1 张拼图，真实工具记录与证据哈希已核对；取消值 `0.73`、最终值 `0.04`、文件名 `measurements.csv` 和导入行数 `13` 均识别正确。记录校验通过，素材缺失的点击过程及文件同一性继续保留为疑点，完整审阅门禁未通过。此处记录历史视觉试用，2026-09-26 的优化使用合成测试；Windows/Linux 远端结果见对应提交的 [CI](https://github.com/koocmitwho/video-operation-review/actions/workflows/tests.yml)。
+2026-09-25 在 Windows 上完成两边的技能加载检查，以及 DeepSeek Harness `deepseek-flash` 的实际视觉审阅：对另一段 32 帧合成录屏完成全帧索引、看图、操作记录、校验和导出。55 次成功图片调用覆盖 32 张原图、22 张裁剪和 1 张拼图，作者核对了工具记录与证据哈希，收据未随仓库公开；取消值 `0.73`、最终值 `0.04`、文件名 `measurements.csv` 和导入行数 `13` 均识别正确。记录校验通过，素材缺失的点击过程及文件同一性继续保留为疑点，完整审阅门禁未通过。此处记录历史视觉试用，2026-09-26 的优化使用合成测试；Windows/Linux 远端结果见对应提交的 [CI](https://github.com/koocmitwho/video-operation-review/actions/workflows/tests.yml)。
+
+已有合成素材、真实短片及三段同源片段的代理试用。用户在软件内照做的验收、长录屏完整流程的吞吐与内存尚未测量；上述性能数据仅覆盖 1080p / 120 帧。
 
 详细结果与测量条件见 [验证说明](references/validation.md) 和 [本次适配验证摘要](validation/host-adaptation.json)。
 
 
-维护与验收约定见 [分层验收](references/layered-acceptance.md)、[处理方法](references/method.md) 和 [开发来源与发布检查](references/maintenance.md)。发布副本可用 `python scripts/check_release.py --target <发布目录>` 只读核对；新增 CI 配置需以对应提交的实际运行结果为准。
+维护与验收约定见 [分层验收](references/layered-acceptance.md)、[处理方法](references/method.md) 和 [开发来源与发布检查](references/maintenance.md)。发布副本可用 `python scripts/check_release.py --target <发布目录>` 只读核对；CI 实际结果见对应提交的 Actions 运行记录。
 
 许可：[MIT](LICENSE)。

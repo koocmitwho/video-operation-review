@@ -26,9 +26,10 @@ For example, if a video shows someone entering `0.20`, cancelling, then entering
 - Accessible FFmpeg and ffprobe executables. FFmpeg must support `-fps_mode passthrough`.
 - The host assistant used for semantic review must be able to read files, run local commands, and actually view images.
 
-Both the model and the current host need actual image input.
+Both the model and the current host need actual image input; a text-only model without image input cannot complete a review.
 
 Validated on Windows with Python 3.10.11 and Python 3.12.10, using FFmpeg 8.1.2.
+Current coverage is a single video stream with common 8-bit encodings; high bit depth, dynamic resolution, and other platform combinations are unverified.
 
 If you need to install the Python dependencies, use your own virtual environment:
 
@@ -67,7 +68,7 @@ DeepSeek Harness must have local skill discovery and loading enabled. This repos
 
 ### Check the environment first
 
-Run from the repository root. For an installed skill, use absolute paths as shown in [hosts.md](references/hosts.md):
+The agent running the skill handles this check. Run from the repository root; for an installed skill, use absolute paths as shown in [hosts.md](references/hosts.md):
 
 ```text
 python scripts/review_video.py doctor
@@ -87,17 +88,21 @@ Older models that retain image input and the necessary tool capabilities are als
 
 See [model adaptation](references/models.en.md) for model strategies, image clarity, and capability checks. Compatibility rules and actual validation results are recorded separately.
 
-### Ask an AI assistant to review a recording
+### Let your agent run the review
 
-After downloading or cloning this repository, you can ask an assistant with access to the directory:
+After installation, explicitly invoke the skill with an AI assistant that can access the video:
 
-> Follow the video-operation-review workflow in this directory's `SKILL.md` to review this software tutorial. Check for existing results first, then perform complete indexing, a coarse review of the full timeline, and detailed review of key operations. Deliver reproducible steps, key evidence, and unresolved questions. Report computational coverage, review coverage, and the number of source frames actually viewed separately.
+> Use `$video-operation-review` to review this software tutorial. Give me steps I can follow, final parameters for each object, key screenshots, and anything that still needs confirmation.
 
-The skill entry point is [SKILL.md](SKILL.md). If it is not installed in a discovery directory, ask the assistant to read that file directly. When the host runs from another working directory, use the script's absolute path and specify the input video and `--work` locations explicitly.
+The skill entry point is [SKILL.md](SKILL.md). If it is not installed in a discovery directory, ask the assistant to read that file directly. The agent checks the environment, chooses a review directory, runs the scripts, actually views images, and records and exports the results. Users do not need to learn the commands or fill in JSON. Existing material, scope, and model choices are reused; provide a time or usage budget if you need one.
+
+The agent first looks for an existing review directory. New work uses your chosen location, or `video-reviews/<video-name>/` under the current task's writable directory, and reports its actual path. Updates explain what has been checked and what comes next. When pausing, the agent provides the result location and a continuation note for another chat. Resuming retains existing records, although replaying the cached prefix can still take time.
+
+The final explanation starts with reproducible steps, final parameters grouped by object and phase, key screenshots, and questions tied to their time positions; coverage statistics and records follow. See the [complete delivery example](examples/tutorial/report.md) and [progress, resumption, and delivery guidance](references/delivery.md) (both in Chinese).
 
 ### Prepare evidence from the command line
 
-Run the following commands from the repository root, replacing the input with your own video. Use a dedicated review directory for that video with `--work`.
+These commands are references for the agent and for debugging. Run them from the repository root with the current video, or use the script's absolute path from another directory. Use a dedicated review directory for that video with `--work`.
 
 ```text
 python scripts/review_video.py --help
@@ -123,7 +128,9 @@ python scripts/review_video.py transcript ./input/speech.json --work ./work/tuto
 
 Subtitles are aligned to the original video timeline using “subtitle time + explicit offset.” Transcript JSON must declare its time base.
 
-See [Language, audio, and subtitles](references/language.md) for subtitle/transcript input, alignment, and extension interfaces.
+This skill does not perform speech recognition, OCR inference, or automatic translation: transcripts are produced by an external ASR adapter and imported as JSON, so audio without existing captions is not transcribed automatically. See [Language, audio, and subtitles](references/language.md) for interfaces and dependencies.
+
+The agent states whether narration was used and identifies its source. When an audio track exists without a transcript, the report explicitly says that narration has not been transcribed.
 
 ### Validate and export
 
@@ -148,6 +155,7 @@ python scripts/review_video.py export --work ./work/tutorial
 | `evidence/` | Original images, crops, and overview contact sheets exported as needed |
 
 Input videos, review databases, and evidence may contain the user's own content. Keep them in their respective working directories.
+Each `--work` is written serially by one recorder; multiple reviewers produce their own records and import them by ID.
 
 ## Understanding coverage statistics
 
@@ -160,9 +168,11 @@ The project records the following separately:
 
 Original images, crops, enlarged views, and contact-sheet panels from the same source frame are deduplicated by source frame. Overview and original-resolution evidence are recorded at separate levels of detail.
 
-Viewing records still need to be checked against actual tool calls. Passing an audit means the records meet the checking rules.
+An audit checks record consistency and interval coverage; viewing records are self-reported and are not independent verification.
 
 ## Validation
+
+On 2026-09-29, the agent execution instructions and report delivery were updated. Windows with Python 3.12.10 and 3.10.11 each ran 145 checks with no failures; each canonical-directory run skipped one Git-index check, which was covered by 15 documentation checks in the release checkout. The final issue-impact display fix also passed 12 report tests in both environments. Three agents reviewed 8-, 26-, and 38-second excerpts from one real recording: 1,368 computed frames, 138 actual image calls, and 128 displayed frames deduplicated by excerpt source identity. All three records passed integrity checks; six source or handoff questions remain, and the complete-review gates did not pass. See the [acceptance summary](validation/agent-delivery-20260929.json) and the [self-contained synthetic example](examples/tutorial/report.md).
 
 After the 2026-09-27 fixes, **all 132 tests passed (34 added)** on Windows with Python 3.12.10 and 3.10.11, taking 93.525 and 135.805 seconds in separate serial runs. Logs: [Python 3.12](validation/tests-fixes-20260927.log), [Python 3.10](validation/tests-fixes-python310-20260927.log). `doctor` and the manual synthetic-GUI flow passed. See the [fix summary](validation/fixes-20260927.json).
 
@@ -178,10 +188,12 @@ python -X utf8 -m unittest discover -s scripts/tests -v
 
 In one trial using a 32-frame synthetic tutorial, the layered workflow displayed 18 distinct source frames, compared with 32 in strict mode. Both recorded [all 9 predefined key states](validation/layered-trial-truth.json) (historical trial summary), with 0 errors in the final parameter value.
 
-On 2026-09-25, skill loading was verified in both hosts on Windows, along with actual visual review using `deepseek-flash` in DeepSeek Harness. On another 32-frame synthetic recording, it completed full-frame indexing, image viewing, operation records, validation, and export. Its 55 successful image calls covered 32 original images, 22 crops, and one overview sheet; actual tool records were reconciled with evidence hashes. It correctly identified the cancelled value `0.73`, final value `0.04`, filename `measurements.csv`, and imported row count `13`. Record validation passed; missing click actions and file-identity evidence remain unresolved, and the full review gate did not pass. This is a historical visual trial; the 2026-09-26 optimization checks use synthetic tests. see the corresponding commit's [CI](https://github.com/koocmitwho/video-operation-review/actions/workflows/tests.yml) for remote Windows/Linux results.
+On 2026-09-25, skill loading was verified in both hosts on Windows, along with actual visual review using `deepseek-flash` in DeepSeek Harness. On another 32-frame synthetic recording, it completed full-frame indexing, image viewing, operation records, validation, and export. Its 55 successful image calls covered 32 original images, 22 crops, and one overview sheet; the author reconciled tool records with evidence hashes, and the receipts are not published with the repository. It correctly identified the cancelled value `0.73`, final value `0.04`, filename `measurements.csv`, and imported row count `13`. Record validation passed; missing click actions and file-identity evidence remain unresolved, and the full review gate did not pass. This is a historical visual trial; the 2026-09-26 optimization checks use synthetic tests. See the corresponding commit's [CI](https://github.com/koocmitwho/video-operation-review/actions/workflows/tests.yml) for remote Windows/Linux results.
+
+Agent trials cover synthetic fixtures, a real short recording, and three excerpts from one real recording. In-application user reproduction and full-workflow throughput and memory for long recordings have not been measured; the performance figures above cover only 1080p / 120 frames.
 
 See [Validation notes](references/validation.md) and the [host adaptation summary](validation/host-adaptation.json) for detailed results and measurement conditions.
 
-Maintenance and acceptance criteria are documented in [Layered acceptance](references/layered-acceptance.md), [Processing methods](references/method.md), and [Development source and release checks](references/maintenance.md). Use `python scripts/check_release.py --target <release-directory>` for a read-only comparison; the new CI configuration must be assessed against actual results for the corresponding commit.
+Maintenance and acceptance criteria are documented in [Layered acceptance](references/layered-acceptance.md), [Processing methods](references/method.md), and [Development source and release checks](references/maintenance.md). Use `python scripts/check_release.py --target <release-directory>` for a read-only comparison; actual CI results are in the Actions runs for the corresponding commit.
 
 License: [MIT](LICENSE).

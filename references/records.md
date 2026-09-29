@@ -1,6 +1,6 @@
 # 操作记录、统计与审计
 
-本文定义步骤 JSON、证据引用和统计口径。
+本文定义供代理填写和导入的步骤 JSON、证据引用和统计口径。用户无需准备这些记录；面向用户的步骤、参数、截图、疑点和继续回执按 [交付指引](delivery.md) 整理。
 
 ## 目录与身份
 
@@ -10,7 +10,7 @@
 
 ## 步骤与疑点导入
 
-下面是字段示例。按实际观察填写后保存 UTF-8 JSON，再运行 import-records。时间由 start_frame/end_frame 查询原始索引。
+下面是字段示例。由代理按实际观察填写，保存 UTF-8 JSON 后运行 import-records。时间由 start_frame/end_frame 查询原始索引。
 
 ```json
 {
@@ -23,8 +23,9 @@
     "module": "实际模块",
     "menu_path": ["菜单名", "子菜单名"],
     "selected_objects": ["可见选中对象"],
+    "input_action": "输入框最后显示 0.02；没有看到确认或应用后状态",
     "final_parameters": {
-      "步长": {"value": "0.02", "unit": "未展示", "evidence": ["f000000006"], "basis": "确认前最终输入框"}
+      "步长": {"value": null, "unit": "未展示", "evidence": ["f000000006"], "basis": "最后输入框显示 0.02；确认或应用后状态未见，生效值未知"}
     },
     "confirmation_action": "未看清确认动作，待补查",
     "visible_result": "对话框关闭；尚未展示运行结果",
@@ -52,6 +53,14 @@
 ```
 
 步骤状态为 `confirmed`、`partial`、`unresolved`；疑点状态为 `open`、`blocked`、`resolved`。`confirmed` 对应证据齐全且疑点已解决的步骤，`blocked` 表示该疑点等待补充材料。
+
+`final_parameters` 只把有确认或应用依据的值表述为生效值；未确认的业务值用 null，并在 basis、confirmation_action、visible_result 或 uncertainties 中保留最后输入、取消及可见状态。上述示例中的 `0.02` 是观察到的输入，不能当作已应用。用户说明按 phase 与 selected_objects 整理，同名参数在不同对象、阶段分别列出；沿用现有字段，不合并成一个全局值。
+
+可选 `input_action` 是审阅者依据画面记录的输入过程，用于报告的“填写什么”，例如“Rate 输入 20，随后取消”。没有发生输入时可写“只核对现有值”；未展示时写明未展示。`final_parameters` 保存阶段结果，不能从结果值反推输入动作。旧记录没有 `input_action` 时仍可导出，不要求补造过程。
+
+疑点可选 `impact`、`next_action`、`needed_information` 分别记录影响、下一步和需要补充的信息；仍保留原有 question、帧范围和 attempts。
+
+疑点应写清时间范围、关联操作及对复现结果的影响；attempts 保留已补查的证据、新信息和仍缺的内容。若原视频缺少相应画面，说明需要哪段补充材料，保留 open 或 blocked，继续其他可完成的步骤；不要反复读取同一证据来推断未知值。
 
 顶层 evidence 包含步骤的全部引用，包括参数内部的 evidence。每个引用关联具体图片和查看登记。文件交接按可见对象、路径、窗口标题、版本与参数状态逐项核对。
 
@@ -85,7 +94,7 @@ source_verification 包含源路径、预期/当前 SHA-256、method 和 rehashe
 | recorded_visual_unique_frames | 原图、裁剪、拼图查看事件按源帧全局去重 |
 | recorded_full_image_unique_frames | native 全图登记按源帧去重 |
 | recorded_overview_unique_frames | overview 查看事件按源帧去重；各粒度可交叠 |
-| independently_verified_visual_frames | 外部核对计数预留字段，当前值 null |
+| independently_verified_visual_frames | 独立核实过的源帧数；脚本无法独立核实，恒为 null |
 | unprocessed_ranges / unindexed_tail | 待计算闭区间 / 待索引尾部 |
 | source_frames_without_full_view_record_ranges | 待补充 native 全图查看登记的源帧范围 |
 | unresolved_issues | open/blocked 疑点列表 |
@@ -96,9 +105,9 @@ source_verification 包含源路径、预期/当前 SHA-256、method 和 rehashe
 | fine_reviewed_frames_recorded / fine_reviewed_ranges | 已登记 reviewed 且角色证据齐全的操作区间并集 |
 | not_coarse_reviewed_ranges / not_fine_examined_ranges / not_fine_reviewed_ranges | 对应审阅层级的后续范围 |
 | candidate_operation_units | 人工候选步骤 ID 去重数 |
-| true_operation_count | 总操作数预留字段，当前值 null |
+| true_operation_count | 视频真实操作总数；程序不判定，恒为 null |
 | approximate_merge_intervals | 人工近似合并的区间数 |
-| review_gate_passed_recorded | 当前模式记录满足复核规则的状态 |
-| semantic_completeness_proven | 兼容状态字段，值为 false |
+| review_gate_passed_recorded | 当前模式记录是否满足复核规则；只比对记录，不构成独立核实 |
+| semantic_completeness_proven | 语义完整性是否被证明；恒为 false |
 
 交付同时报告全帧计算、时间线粗审、操作精审、候选完成与实际图片查看登记，并附工具核对记录。

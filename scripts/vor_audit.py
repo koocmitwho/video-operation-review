@@ -393,5 +393,5 @@ def audit_omissions(conn, work, queue=False, base_validation=None, mode=None):
         'suggested_frames': suggested, 'records_ready_for_omission_review': ready,
         'omission_review': review, 'review_gate_passed_recorded': passed,
         'semantic_completeness_proven': False,
-        'assurance': '按当前记录核对状态归属、证据关联与复核范围。'
+        'assurance': '仅记录一致性核对，不含独立核实。'
     }

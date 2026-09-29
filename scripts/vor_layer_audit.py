@@ -111,7 +111,7 @@ def audit_layers(conn,work,queue=False,base_validation=None):
                 findings=audit.findings,summary=dict(intervals=len(entries),**counts,findings=len(audit.findings),suggested_frame_count=len(suggested),queued_requests=queued),
                 suggested_frames=suggested,records_ready_for_omission_review=ready,omission_review=review,
                 review_gate_passed_recorded=ready and review['status']=='current_independent_review_recorded',
-                semantic_completeness_proven=False,assurance='按区间覆盖、样本、角色证据与当前复核记录检查。')
+                semantic_completeness_proven=False,assurance='仅区间覆盖与样本一致性核对，不含独立核实。')
 
 
 def _review(conn,audit,entries,requirements,snapshot):

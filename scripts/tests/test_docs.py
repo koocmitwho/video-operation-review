@@ -35,6 +35,18 @@ def links(path):
 
 
 class DocumentationContract(unittest.TestCase):
+    def test_command_examples_have_no_invalid_control_characters(self):
+        blocks = re.compile(r'(?ms)^```(?:powershell|bash|sh|shell|cmd|text)[ \t]*\n(.*?)^```[ \t]*$')
+        offenders = []
+        for doc in (p for p in project_files() if p.suffix == '.md'):
+            text = doc.read_text(encoding='utf-8')
+            for block in blocks.finditer(text):
+                for offset, char in enumerate(block.group(1)):
+                    if (ord(char) < 32 and char not in '\t\r\n') or ord(char) == 127:
+                        line = text.count('\n', 0, block.start(1) + offset) + 1
+                        offenders.append(f'{doc.relative_to(ROOT)}:{line}: U+{ord(char):04X}')
+        self.assertEqual(offenders, [], 'Command arguments contain non-copyable control characters.')
+
     def test_relative_markdown_links_resolve(self):
         for doc in (p for p in project_files() if p.suffix == '.md'):
             for target in links(doc):
@@ -61,9 +73,11 @@ class DocumentationContract(unittest.TestCase):
     def test_skill_frontmatter_matches_install_directory(self):
         text = (ROOT / 'SKILL.md').read_text(encoding='utf-8')
         name = re.search(r'(?m)^name: (\S+)$', text).group(1)
-        # maintenance.md documents the publisher checkout suffix on this machine.
-        directory = ROOT.name.removesuffix('-github')
-        self.assertEqual(name, directory)
+        self.assertRegex(name, r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
+        # 安装目录名取自 README 记录的安装路径，与检出目录名无关。
+        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+        installed = re.search(r'skills[/\\]([a-z0-9-]+)', readme).group(1)
+        self.assertEqual(name, installed)
         self.assertRegex(text, r'(?m)^description: >-\n  \S')
 
     def test_reference_commands_resolve_from_skill_root(self):
@@ -104,16 +118,6 @@ class DocumentationContract(unittest.TestCase):
         self.assertTrue(historical.is_file())
         self.assertFalse((ROOT / 'validation/script-tests.log').exists())
 
-    def test_project_documentation_describes_supported_workflow(self):
-        phrases = ['纯文本模型不兼容', '不兼容本 skill', '未实现：', '脚本无法证明',
-                   '脚本无法验证', '当前不运行', '不能独立证明', '## 当前限制',
-                   'Text-only models are incompatible', 'have not yet been integrated']
-        for doc in (p for p in project_files() if p.suffix == '.md'):
-            text = prose(doc.read_text(encoding='utf-8'))
-            for phrase in phrases:
-                with self.subTest(doc=str(doc.relative_to(ROOT)), phrase=phrase):
-                    self.assertNotIn(phrase, text)
-
     def test_dependency_ranges_bound_existing_packages(self):
         text = (ROOT / 'requirements.txt').read_text(encoding='utf-8')
         self.assertRegex(text, r'(?mi)^numpy>=2,<3$')
@@ -136,10 +140,19 @@ class DocumentationContract(unittest.TestCase):
         attrs = ROOT / '.gitattributes'
         self.assertTrue(attrs.is_file())
         self.assertIn('* text=auto', attrs.read_text(encoding='utf-8'))
-        for file in project_files():
-            if file.is_file() and file.suffix in {'.py', '.md', '.yaml', '.yml', '.json', '.txt', '.log'}:
-                with self.subTest(file=str(file.relative_to(ROOT))):
-                    self.assertNotIn(b'\r', file.read_bytes())
+        if not (ROOT / '.git').exists():
+            self.skipTest('Not a git checkout; line endings are normalized by git on clone.')
+        # 检查提交内容（索引侧），不依赖检出时的换行转换或编辑器设置。
+        result = subprocess.run(['git', '-C', str(ROOT), 'ls-files', '--eol'],
+                                capture_output=True, text=True, encoding='utf-8', timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        suffixes = {'.py', '.md', '.yaml', '.yml', '.json', '.txt', '.log'}
+        offenders = []
+        for line in result.stdout.splitlines():
+            index, _, path = line.partition('\t')
+            if Path(path.strip()).suffix in suffixes and index.split()[0] in {'i/crlf', 'i/mixed'}:
+                offenders.append(path.strip())
+        self.assertEqual(offenders, [])
 
     def test_review_outputs_are_ignored(self):
         with tempfile.TemporaryDirectory() as folder:

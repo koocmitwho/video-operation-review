@@ -18,7 +18,7 @@ python scripts/check_release.py --target ../video-operation-review-github
 
 ## 文档与安装验收
 
-test_docs.py 纳入 unittest discovery，检查 Markdown 相对链接、从 SKILL.md 到参考文档的可达性、中英文 README 标题层级和代码块数量、参数字面、验证日志、技能元数据、许可与产物忽略规则。frontmatter.name 与安装目录名对应；本机发布副本名称使用 -github 后缀，名称测试按该已登记副本规则核对。
+test_docs.py 纳入 unittest discovery，检查 Markdown 相对链接、从 SKILL.md 到参考文档的可达性、中英文 README 标题层级和代码块数量、参数字面、验证日志、技能元数据、许可与产物忽略规则。frontmatter.name 与 README 所载安装目录名对应；行尾检查使用 Git 索引，非 Git 检出时跳过该项。
 
 本项目采用 [MIT 许可](../LICENSE)，标准文本来源为 [Open Source Initiative](https://opensource.org/license/mit)。
 

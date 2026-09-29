@@ -1,0 +1,145 @@
+{
+  "date": "2026-09-29",
+  "scope": "Instructions for the user-owned agent, readable report rendering, portable synthetic example, local forward trials",
+  "schema_version_preserved": 3,
+  "cli_contract_preserved": true,
+  "steps_optional_input_action": "Separates observed input actions from resulting parameter values; older records remain valid.",
+  "regression": [
+    {
+      "python": "3.12.10",
+      "platform": "Windows",
+      "tests": 145,
+      "passed": 144,
+      "skipped": 1,
+      "failed": 0,
+      "seconds": 106.241
+    },
+    {
+      "python": "3.10.11",
+      "platform": "Windows",
+      "tests": 145,
+      "passed": 144,
+      "skipped": 1,
+      "failed": 0,
+      "seconds": 143.762
+    }
+  ],
+  "skip_reason": "The canonical development directory has no Git metadata; the Git-index line-ending check was separately exercised in the release checkout.",
+  "latest_report_followup": {
+    "change": "Show the recorded impact of an unresolved issue",
+    "red_verified": true,
+    "tests_each_python": 12,
+    "python_versions": [
+      "3.12.10",
+      "3.10.11"
+    ],
+    "failed": 0
+  },
+  "release_checkout_checks": {
+    "documentation_tests": 15,
+    "packaged_example_tests": 1,
+    "failed": 0,
+    "skipped": 0
+  },
+  "skill_format_valid": true,
+  "synthetic_example": {
+    "path": "examples/tutorial/report.md",
+    "source_frames": 12,
+    "actual_image_calls": 9,
+    "unique_displayed_frames": 9,
+    "steps": 3,
+    "open_issues": 1,
+    "valid": true,
+    "review_complete": false,
+    "material": "project-generated synthetic GUI",
+    "portable_links_checked": true
+  },
+  "real_trials": {
+    "recordings": 1,
+    "clips": 3,
+    "duration_seconds": 72.0,
+    "computed_frames": 1368,
+    "actual_image_calls": 138,
+    "unique_displayed_frames": 128,
+    "cli_calls": 208,
+    "prior_context_available": true,
+    "blind_test": false,
+    "cases": [
+      {
+        "case": "parameters",
+        "category": "parameter inspection",
+        "duration_seconds": 8,
+        "computed_frames": 152,
+        "candidate_frames": 23,
+        "candidates_pending": 0,
+        "actual_image_calls": 44,
+        "unique_displayed_frames": 42,
+        "cli_calls": 68,
+        "steps": 3,
+        "confirmed_steps": 1,
+        "partial_steps": 2,
+        "open_issues": 2,
+        "valid": true,
+        "review_complete": false,
+        "audio_used": false,
+        "wall_seconds": 805,
+        "full_independent_review": false,
+        "software_reproduction_performed": false
+      },
+      {
+        "case": "file-handoff",
+        "category": "file handoff",
+        "duration_seconds": 26.0,
+        "computed_frames": 494,
+        "candidate_frames": 50,
+        "candidates_pending": 0,
+        "actual_image_calls": 57,
+        "unique_displayed_frames": 50,
+        "cli_calls": 80,
+        "steps": 5,
+        "confirmed_steps": 2,
+        "partial_steps": 3,
+        "open_issues": 3,
+        "valid": true,
+        "review_complete": false,
+        "audio_used": false,
+        "wall_seconds": 953.452973,
+        "full_independent_review": false,
+        "software_reproduction_performed": false
+      },
+      {
+        "case": "replacement",
+        "category": "delete and recreate an object",
+        "duration_seconds": 38.0,
+        "computed_frames": 722,
+        "candidate_frames": 23,
+        "candidates_pending": 0,
+        "actual_image_calls": 37,
+        "unique_displayed_frames": 36,
+        "cli_calls": 60,
+        "steps": 4,
+        "confirmed_steps": 3,
+        "partial_steps": 1,
+        "open_issues": 1,
+        "valid": true,
+        "review_complete": false,
+        "audio_used": false,
+        "wall_seconds": 503.520593,
+        "full_independent_review": false,
+        "software_reproduction_performed": false
+      }
+    ],
+    "time_scope": "Per-agent end-to-end time includes instructions, reasoning, recording, waiting and recovery. Runs overlapped; do not sum these as elapsed task time or extrapolate long-video throughput.",
+    "root_spot_checked_images": 6,
+    "source_media_and_receipts_included_in_public_bundle": false,
+    "semantic_accuracy_rate_measured": false,
+    "token_usage_measured": false,
+    "step_status_basis": "Counts use stored step status; the report also considers linked open issues when choosing its confirmed-step list."
+  },
+  "observed_workflow_issue": {
+    "issue": "Large intervals and validation JSON can exceed the host tool output budget.",
+    "response": "Agent instructions now preserve full JSON in a file and inspect a projection; existing audit --summary is retained."
+  },
+  "remote_ci_run_for_this_change": false,
+  "commit_or_push_performed": false
+}
