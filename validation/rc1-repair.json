@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-01",
+  "baseline_commit": "482a0da520b717974352b9c9d9778261ac316103",
+  "scope": "local unpublished acceptance-script and record repairs",
+  "production_cli_changed": false,
+  "original_issues_closed": 0,
+  "original_issues_total": 6,
+  "records_valid": 8,
+  "reviews_complete": 0,
+  "records_total": 8,
+  "human_reference": {
+    "kind": "human_confirmed_ai_draft",
+    "questions": 7,
+    "operation_units": 4,
+    "seconds": 38,
+    "blind_annotation": false,
+    "comparison": {
+      "matched_operations_before_after": [
+        4,
+        4
+      ],
+      "operations_denominator": 4,
+      "matched_parameter_slots_before_after": [
+        11,
+        11
+      ],
+      "parameter_denominator": 11,
+      "omissions_before_after": [
+        0,
+        0
+      ],
+      "extra_steps_before_after": [
+        0,
+        0
+      ],
+      "temporary_sequence_matches_before_after": [
+        1,
+        1
+      ],
+      "temporary_sequence_denominator": 1,
+      "result_confirmation_matches_before_after": [
+        4,
+        4
+      ],
+      "result_confirmation_denominator": 4,
+      "cancellation": "not evaluated, no cancellation sample",
+      "exact_click_timing": "not evaluated, no annotated click boundary",
+      "source_evidence_anchors_verified": 19,
+      "semantic_improvement_claim": false
+    }
+  },
+  "baseline_python312_tests": {
+    "run": 152,
+    "passed": 152,
+    "skipped": 0
+  },
+  "private_consolidation_regression": {
+    "run": 4,
+    "passed": 4,
+    "red_evidence": "three tests failed with 19 assertions; fourth test failed separately before its repair"
+  },
+  "source_mapping": {
+    "verified_rgb_frames": 1938,
+    "matching": 1938,
+    "fps_derived_identity": false
+  },
+  "new_remote_ci": false,
+  "release_action": "none",
+  "decision": "retain_rc",
+  "verification_status": "local core tests complete; isolated installation documented in the external bundle receipt",
+  "final_tests": {
+    "python312": {
+      "version": "3.12.10",
+      "run": 152,
+      "passed": 152,
+      "skipped": 0,
+      "seconds": 99.543
+    },
+    "python310": {
+      "version": "3.10.11",
+      "run": 152,
+      "passed": 152,
+      "skipped": 0,
+      "seconds": 145.457
+    }
+  },
+  "assembly_failure": {
+    "python310_first_run": "one documentation link target not yet written; complete suite rerun passed after assembly"
+  }
+}

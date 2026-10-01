@@ -2,7 +2,7 @@
 
 简体中文 | [English](README.en.md)
 
-固定版本预发布候选：**0.1.0-rc.1**。版本号见 [VERSION](VERSION)，范围、兼容变化与发布条件见 [候选说明](references/release-candidate.md)。
+固定版本预发布候选：**0.1.0-rc.2**。版本号见 [VERSION](VERSION)，本次范围见 [RC.2 说明](references/release-rc2.md)，首个候选的兼容变化见 [RC.1 说明](references/release-candidate.md)。
 
 **面向软件操作录屏的分层审阅技能：还原操作步骤，保留画面。**
 
@@ -174,6 +174,8 @@ python scripts/review_video.py export --work ./work/tutorial
 审计核对记录一致性与区间覆盖；查看登记是自报值，不构成独立核实。
 
 ## 验证情况
+
+2026-10-01 的[本地修复复核](references/rc1-repair.md)确认了验收整理脚本重复执行丢失观察值、重复追加补查以及记录文字矛盾；生产 CLI 实现未改。一个 38 秒真实片段的 AI 草稿经用户确认，作为该片段的核对基准，不能代表盲标注或其他视频的准确率。6 个原疑点和 8 份未完成审阅仍保留。`0.1.0-rc.2` 收录脱敏摘要、整理补丁及可选回归，详见 [RC.2 说明](references/release-rc2.md)。
 
 2026-09-30–2026-10-01准备`0.1.0-rc.1`：两套Windows/Python环境各152项回归，151通过、1跳过，无失败；有限短片内部复核实际118次图片调用、101个不同clip源帧。8份记录有效、完整审阅均未完成；原6疑点保留，3项补到新信息，数值读法分歧保留null。没有独立人工标注、token实测或该候选的远端CI。见 [候选复核摘要](validation/rc-20260930.json) 与 [候选说明](references/release-candidate.md)。
 

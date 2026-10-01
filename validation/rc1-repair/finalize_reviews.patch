@@ -1,0 +1,36 @@
+--- a/finalize_reviews.py
++++ b/finalize_reviews.py
+@@ -97,0 +98,6 @@
++def append_attempt_once(item, attempt):
++    # Replaying a receipt is not a new review. Preserve existing history verbatim.
++    if attempt not in item['attempts']:
++        item['attempts'].append(attempt)
++
++
+@@ -163 +169,2 @@
+-    value['observed_value'] = value['value']
++    if 'observed_value' not in value:
++        value['observed_value'] = value['value']
+@@ -187 +194,2 @@
+-        i.update(step_ids=['S01b', 'S02'], issue_ids=['Q03', 'Q04'], fine_status='partial',
++        i.update(phase='Global Seeds 窗口检查与关闭（提交待核实）',
++                 step_ids=['S01b', 'S02'], issue_ids=['Q03', 'Q04'], fine_status='partial',
+@@ -198 +206 @@
+-issues['Q01']['attempts'].append(dict(action='回看原视频前邻12秒窗口', evidence=[ref(0), ref(20)],
++append_attempt_once(issues['Q01'], dict(action='回看原视频前邻12秒窗口', evidence=[ref(0), ref(20)],
+@@ -203 +211 @@
+-issues['Q02']['attempts'].append(dict(action='回看原视频后邻8秒窗口', evidence=[ref(151)],
++append_attempt_once(issues['Q02'], dict(action='回看原视频后邻8秒窗口', evidence=[ref(151)],
+@@ -218,0 +227,3 @@
++s['confirmation_action'] = '预览中指针到达加载按钮；后续 Sheet3 出现四列表格，node (2)显示已加载状态。完整行数待人工核对。'
++s['transition']['confirmation']['note'] = s['confirmation_action']
++s['transition']['result']['note'] = s['visible_result']
+@@ -223 +234 @@
+-    issues[ident]['attempts'].append(dict(action='本轮再次核对切窗及目录原图', evidence=[ref(261), ref(265), ref(333)],
++    append_attempt_once(issues[ident], dict(action='本轮再次核对切窗及目录原图', evidence=[ref(261), ref(265), ref(333)],
+@@ -225 +236 @@
+-issues['Q03']['attempts'].append(dict(action='回看MATLAB后邻10秒窗口', evidence=[ref(493)],
++append_attempt_once(issues['Q03'], dict(action='回看MATLAB后邻10秒窗口', evidence=[ref(493)],
+@@ -236 +247 @@
+-    i['attempts'].append(dict(action='本轮复看Write Input结果原图', evidence=[ref(717), ref(721)],
++    append_attempt_once(i, dict(action='本轮复看Write Input结果原图', evidence=[ref(717), ref(721)],

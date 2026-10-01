@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | English
 
-Fixed prerelease candidate: **0.1.0-rc.1**. See [VERSION](VERSION) and the [candidate notes](references/release-candidate.md) for scope, compatibility changes, and release conditions.
+Fixed prerelease candidate: **0.1.0-rc.2**. See [VERSION](VERSION), the [RC.2 notes](references/release-rc2.md) for this release's scope, and the [RC.1 notes](references/release-candidate.md) for the first candidate's compatibility changes.
 
 **A layered review skill for software screen recordings: reconstruct operations and preserve video frames.**
 
@@ -173,6 +173,8 @@ Original images, crops, enlarged views, and contact-sheet panels from the same s
 An audit checks record consistency and interval coverage; viewing records are self-reported and are not independent verification.
 
 ## Validation
+
+The [local repair review on 2026-10-01](references/rc1-repair.md) reproduced lost observations on repeated consolidation, duplicate investigation entries, and contradictory record prose in the private acceptance script. The production CLI implementation is unchanged. A user confirmed an AI draft for one real 38-second clip; it is a reference for that clip, not blind annotation or an accuracy claim for other videos. The six original questions and eight incomplete reviews remain open. `0.1.0-rc.2` includes the sanitized summary, consolidation patch, and optional regression; see the [RC.2 notes](references/release-rc2.md).
 
 The `0.1.0-rc.1` candidate was prepared during 2026-09-30–2026-10-01. Each of two Windows/Python environments ran 152 tests: 151 passed, one skipped, none failed. The bounded internal review made 118 image calls covering 101 distinct clip-source frames. All eight records passed integrity checks; all eight reviews remain incomplete. The original six questions remain open, with three partially clarified; conflicting numeric reads remain null. There are no independent human labels, measured tokens, or remote CI results for this candidate. See the [candidate review summary](validation/rc-20260930.json) and [candidate notes](references/release-candidate.md).
 
