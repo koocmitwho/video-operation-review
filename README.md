@@ -2,6 +2,8 @@
 
 简体中文 | [English](README.en.md)
 
+固定版本预发布候选：**0.1.0-rc.1**。版本号见 [VERSION](VERSION)，范围、兼容变化与发布条件见 [候选说明](references/release-candidate.md)。
+
 **面向软件操作录屏的分层审阅技能：还原操作步骤，保留画面。**
 
 适用于建模、编程、数据处理等逐步演示的软件教程。它帮助具备视觉能力的 AI 助手从录屏中整理菜单入口、选中对象、最终参数、确认或取消、文件交接和可见结果，输出可以核对和继续完善的操作记录。
@@ -141,7 +143,7 @@ python scripts/review_video.py audit --work ./work/tutorial --summary
 python scripts/review_video.py export --work ./work/tutorial
 ```
 
-`valid` 表示源文件、证据哈希与记录完整性；`review_complete` 表示候选查看和当前复核门禁完成。默认 validate 按 valid 返回 0/1；`--require-coverage` 将完整审阅加入退出条件。`--rehash-source` 显式重算源文件哈希，结果中的 rehashed 记录本次行为。export 支持分阶段交付并保留当前状态。
+`valid` 表示源文件、证据哈希与记录完整性；`review_complete` 表示候选查看和当前复核门禁完成。默认 validate 按 valid 返回 0/1；`--require-coverage` 将完整审阅加入退出条件，但不改变 valid 的含义：有效记录尚未完成时返回 `valid=true`、`review_complete=false` 和退出码 1，原因见 `coverage_errors`。`--rehash-source` 显式重算源文件哈希，结果中的 rehashed 记录本次行为。export 支持分阶段交付并保留当前状态。
 
 ## 输出内容
 
@@ -173,6 +175,8 @@ python scripts/review_video.py export --work ./work/tutorial
 
 ## 验证情况
 
+2026-09-30–2026-10-01准备`0.1.0-rc.1`：两套Windows/Python环境各152项回归，151通过、1跳过，无失败；有限短片内部复核实际118次图片调用、101个不同clip源帧。8份记录有效、完整审阅均未完成；原6疑点保留，3项补到新信息，数值读法分歧保留null。没有独立人工标注、token实测或该候选的远端CI。见 [候选复核摘要](validation/rc-20260930.json) 与 [候选说明](references/release-candidate.md)。
+
 2026-09-29 完成代理执行指引与报告交付改进。Windows / Python 3.12.10、3.10.11 各运行 145 项检查，均无失败；主目录各跳过 1 项 Git 索引检查，已在发布副本的 15 项文档检查中补验。最后的疑点影响展示修补另在两套环境通过 12 项报告用例。三位代理分别审阅同一真实录屏的 8、26、38 秒片段，共计算 1368 帧、实际调用图片工具 138 次，按各片段源身份去重为 128 帧；三份记录完整性通过，保留 6 个素材或交接疑点，完整审阅门禁未通过。结果见 [本轮验收摘要](validation/agent-delivery-20260929.json)；可直接打开 [自建交付示例](examples/tutorial/report.md)。
 
 2026-09-27 修复后，Windows / Python 3.12.10 与 3.10.11 **均通过 132 项测试（新增 34 项）**，串行运行耗时分别为 93.525 秒、135.805 秒。日志：[Python 3.12](validation/tests-fixes-20260927.log)、[Python 3.10](validation/tests-fixes-python310-20260927.log)。`doctor` 与合成 GUI 手工端到端通过；[修复摘要](validation/fixes-20260927.json) 保存本轮结果。
@@ -188,6 +192,8 @@ python -X utf8 -m unittest discover -s scripts/tests -v
 ```
 
 一次 32 帧合成教程试用中，分层方式实际显示了 18 个不同源帧，严格方式为 32 个；两者均记录了 [预设关键状态 9 项](validation/layered-trial-truth.json)（原试用汇总），最终参数错误为 0。
+
+该预设与原代理答案用于内部回归，不能作为独立人工标准答案或语义准确率。
 
 2026-09-25 在 Windows 上完成两边的技能加载检查，以及 DeepSeek Harness `deepseek-flash` 的实际视觉审阅：对另一段 32 帧合成录屏完成全帧索引、看图、操作记录、校验和导出。55 次成功图片调用覆盖 32 张原图、22 张裁剪和 1 张拼图，作者核对了工具记录与证据哈希，收据未随仓库公开；取消值 `0.73`、最终值 `0.04`、文件名 `measurements.csv` 和导入行数 `13` 均识别正确。记录校验通过，素材缺失的点击过程及文件同一性继续保留为疑点，完整审阅门禁未通过。此处记录历史视觉试用，2026-09-26 的优化使用合成测试；Windows/Linux 远端结果见对应提交的 [CI](https://github.com/koocmitwho/video-operation-review/actions/workflows/tests.yml)。
 

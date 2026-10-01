@@ -4,7 +4,7 @@ import json
 import math
 from pathlib import Path
 
-from vor_store import (atomic_text, dump, evidence_references, get_meta, log_history, now,
+from vor_store import (atomic_text, dump, evidence_references, get_meta, issue_steps, log_history, now,
                        rebuild_candidates, set_meta)
 
 
@@ -215,6 +215,11 @@ def fine_problems(conn,entry,steps,require_complete=True):
     errors=[]
     if entry['disposition']!='operation' or entry['fine_status']=='not_reviewed': return ['operation_not_fine_reviewed']
     if require_complete and entry['fine_status']!='reviewed': errors.append('operation_not_fine_reviewed')
+    if require_complete:
+        for issue in payloads(conn,'issues'):
+            if issue.get('status')!='resolved' and (issue['id'] in entry['issue_ids'] or
+                    set(entry['step_ids']) & set(issue_steps(issue,list(steps.values())))):
+                errors.append('operation_issue_unresolved')
     for ident in entry['step_ids']:
         s=steps.get(ident)
         if s is None: errors.append('interval_step_missing'); continue

@@ -1,0 +1,101 @@
+{
+  "checklist_is_ground_truth": false,
+  "basis": "internal_consistency_review_not_human_ground_truth",
+  "actual_image_calls": 9,
+  "actual_unique_source_frames": 9,
+  "token_usage": null,
+  "checks": [
+    {
+      "id": "S01",
+      "category": "cancel_operation",
+      "claim": "临时20取消",
+      "evidence": [
+        {
+          "clip": "synthetic-demo",
+          "source_sha256": "006c0c30d4738b251e6de17ed93e80c41f15d8b361a944c334b2a2aa3df60d8d",
+          "frame_no": 4,
+          "pts": "2000",
+          "pts_time": "2.000000",
+          "asset_id": "f000000004",
+          "asset_sha256": "5632ec99d07f52021d034ad298ae8b0e3ba5bde4516e90eed6e7676d63147bf3"
+        },
+        {
+          "clip": "synthetic-demo",
+          "source_sha256": "006c0c30d4738b251e6de17ed93e80c41f15d8b361a944c334b2a2aa3df60d8d",
+          "frame_no": 5,
+          "pts": "2500",
+          "pts_time": "2.500000",
+          "asset_id": "f000000005",
+          "asset_sha256": "5511a9b3990c0b80ae209a5ab64e5b3ebece14904071ec3c934eb70b3e1c2bbe"
+        }
+      ],
+      "visible_observation": "参数框20，随后Cancelled且Current rate=1。",
+      "bounded_conclusion": "合成画面中20未应用、取消后仍为1。",
+      "uncertainty": "未见鼠标按下瞬间；不是真实软件运行。",
+      "values": {
+        "temporary": 20,
+        "after_cancel": 1
+      }
+    },
+    {
+      "id": "S02",
+      "category": "final_parameters",
+      "claim": "5应用",
+      "evidence": [
+        {
+          "clip": "synthetic-demo",
+          "source_sha256": "006c0c30d4738b251e6de17ed93e80c41f15d8b361a944c334b2a2aa3df60d8d",
+          "frame_no": 6,
+          "pts": "3000",
+          "pts_time": "3.000000",
+          "asset_id": "f000000006",
+          "asset_sha256": "78ec5c4ba8ee3043b2a93cd23c88e0627acb3ec077c37ae2f4e0aa775e15a08e"
+        },
+        {
+          "clip": "synthetic-demo",
+          "source_sha256": "006c0c30d4738b251e6de17ed93e80c41f15d8b361a944c334b2a2aa3df60d8d",
+          "frame_no": 8,
+          "pts": "4000",
+          "pts_time": "4.000000",
+          "asset_id": "f000000008",
+          "asset_sha256": "d6254bb3f9b98153cc7c8e45af5b12532f7574158a5f3e71621126c0e09be0a9"
+        }
+      ],
+      "visible_observation": "参数框5，随后Applied rate = 5且Current rate=5。",
+      "bounded_conclusion": "合成画面中的应用后值为5。",
+      "uncertainty": "不能用本样例衡量真实软件准确率。",
+      "values": {
+        "after_apply": 5
+      }
+    },
+    {
+      "id": "S03",
+      "category": "source_vs_result",
+      "claim": "SUCCESS源码与运行错误",
+      "evidence": [
+        {
+          "clip": "synthetic-demo",
+          "source_sha256": "006c0c30d4738b251e6de17ed93e80c41f15d8b361a944c334b2a2aa3df60d8d",
+          "frame_no": 9,
+          "pts": "4500",
+          "pts_time": "4.500000",
+          "asset_id": "f000000009",
+          "asset_sha256": "590919c5d789bda162417cf4366acc7167240ef56b06b7716c8817c6ebfd4bd2"
+        },
+        {
+          "clip": "synthetic-demo",
+          "source_sha256": "006c0c30d4738b251e6de17ed93e80c41f15d8b361a944c334b2a2aa3df60d8d",
+          "frame_no": 10,
+          "pts": "5000",
+          "pts_time": "5.000000",
+          "asset_id": "f000000010",
+          "asset_sha256": "431362b68a38f7db94c5a40729cd198ead64b76f3be03c8697bc5c6527f899f8"
+        }
+      ],
+      "visible_observation": "源码print(\"SUCCESS\")仍在，状态从Running...变成输出目录错误。",
+      "bounded_conclusion": "应交付错误状态，不能宣称执行成功或输出已存在。",
+      "uncertainty": "实际文件系统和修复后结果未展示。",
+      "values": null
+    }
+  ]
+}

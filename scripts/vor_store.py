@@ -18,6 +18,19 @@ def dump(value):
     return json.dumps(value, ensure_ascii=False, allow_nan=False)
 
 
+def issue_steps(issue, steps):
+    """Resolve explicit issue links first; use intersecting ranges only as a fallback."""
+    explicit = issue.get('step_ids') or ([issue['step_id']] if issue.get('step_id') else [])
+    if explicit:
+        return list(explicit) if isinstance(explicit, list) else [explicit]
+    start, end = issue.get('start_frame'), issue.get('end_frame')
+    if type(start) is int and type(end) is int:
+        return [step['id'] for step in steps if type(step.get('start_frame')) is int
+                and type(step.get('end_frame')) is int
+                and step['start_frame'] <= end and step['end_frame'] >= start]
+    return []
+
+
 def sha256(path):
     h = hashlib.sha256()
     with Path(path).open('rb') as f:
@@ -578,10 +591,10 @@ def validate(conn, work, require_coverage=False, mode=None, force_source_hash=Fa
                                          and audit['review_gate_passed_recorded'])
         if require_coverage:
             result['coverage_audit'] = audit
+            result['coverage_errors'] = []
         if require_coverage and not result['review_complete']:
-            result['errors'].append({'code': 'omission_gate_incomplete', 'reference': 'coverage_audit',
-                                     'message': '请完成候选查看、状态衔接及当前内容的复核。'})
-            result['valid'] = False
+            result['coverage_errors'].append({'code': 'omission_gate_incomplete', 'reference': 'coverage_audit',
+                                              'message': '请完成候选查看、状态衔接及当前内容的复核。'})
     return result
 
 

@@ -221,6 +221,21 @@ class ReadableReportContract(unittest.TestCase):
         self.assertNotIn('1 s', fill_line)
         self.assertIn('阶段参数记录：步长 = 1 s', md)
 
+    def test_linked_open_issue_downgrades_display_without_rewriting_step(self):
+        step = self.step('S1', 0, 1)
+        self.add_records(steps=[step], issues=[dict(
+            id='Q1', question='保存后的交接还未确认', status='open', step_ids=['S1'], attempts=[])])
+        result, md = self.export()
+        heading = next(line for line in md.splitlines() if line.startswith('### S1'))
+        self.assertIn('部分确认，待核实', heading)
+        self.assertIn('步骤登记为已确认', heading)
+        self.assertIn('待核实步骤：S1', md)
+        self.assertNotIn('S1 完成后', md)
+        saved = json.loads((self.work / 'review.json').read_text(encoding='utf-8'))
+        self.assertEqual(saved['steps'][0]['payload'], step)
+        self.assertTrue(result['validation_passed'])
+        self.assertFalse(result['review_complete'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,0 +1,181 @@
+{
+  "version": "0.1.0-rc.1",
+  "date_started": "2026-09-30",
+  "date_frozen": "2026-10-01",
+  "baseline_commit": "a6dbc742b023ffb42678ea9ee6e83eb8606151e6",
+  "initial_parity_files": 78,
+  "canonical_only_edits": true,
+  "schema_version": 3,
+  "regression": [
+    {
+      "python": "3.12.10",
+      "numpy": "2.5.1",
+      "pillow": "12.3.0",
+      "sqlite": "3.49.1",
+      "platform": "Windows",
+      "tests": 152,
+      "passed": 151,
+      "skipped": 1,
+      "failed": 0,
+      "seconds": 99.775,
+      "log": "validation/tests-rc-python312.log"
+    },
+    {
+      "python": "3.10.11",
+      "numpy": "2.2.6",
+      "pillow": "12.0.0",
+      "sqlite": "3.40.1",
+      "platform": "Windows",
+      "tests": 152,
+      "passed": 151,
+      "skipped": 1,
+      "failed": 0,
+      "seconds": 150.969,
+      "log": "validation/tests-rc-python310.log"
+    }
+  ],
+  "basis": "internal_consistency_review_not_human_ground_truth",
+  "independent_human_annotations": false,
+  "semantic_accuracy": null,
+  "semantic_completeness_proven": false,
+  "token_usage": null,
+  "bounded_duration_seconds": 132.8,
+  "real_duration_seconds": 126.8,
+  "synthetic_duration_seconds": 6,
+  "cached_computed_frames_reused": 1368,
+  "newly_computed_frames": 668,
+  "actual_image_calls": 118,
+  "actual_unique_source_frames": 101,
+  "image_call_budget": 160,
+  "new_image_extraction_budget": 240,
+  "original_issues": {
+    "total": 6,
+    "fully_closed": 0,
+    "partially_clarified": 3,
+    "unresolved": 6
+  },
+  "findings": [
+    "missing first mesh prompt in old record",
+    "old message misattributed to new confirmation",
+    "conflicting numeric reads kept null",
+    "focus is not Cancel execution",
+    "source SUCCESS is not runtime success"
+  ],
+  "minimum_fixes": [
+    "valid independent of coverage requirement; coverage_errors; exit 1 retained",
+    "open linked issues excluded from completed fine count and reflected in headings",
+    "restored extraction recreates logs; filter failures finalize attempts",
+    "fixed VERSION and dependency-free --version"
+  ],
+  "failure_tests_before_fixes": {
+    "completion_and_report_tests": 5,
+    "assertion_failures": 8,
+    "restore_tests": 2,
+    "restore_assertion_failures": 2,
+    "version_tests": 1,
+    "version_failures": 1
+  },
+  "cases": [
+    {
+      "case": "parameters",
+      "computed_frames": 152,
+      "valid": true,
+      "review_complete": false,
+      "actual_image_calls": 20,
+      "actual_unique_source_frames": 16,
+      "displayed_image_files": 17
+    },
+    {
+      "case": "file-handoff",
+      "computed_frames": 494,
+      "valid": true,
+      "review_complete": false,
+      "actual_image_calls": 25,
+      "actual_unique_source_frames": 15,
+      "displayed_image_files": 23
+    },
+    {
+      "case": "replacement",
+      "computed_frames": 722,
+      "valid": true,
+      "review_complete": false,
+      "actual_image_calls": 28,
+      "actual_unique_source_frames": 27,
+      "displayed_image_files": 28
+    },
+    {
+      "case": "seed-before",
+      "computed_frames": 228,
+      "valid": true,
+      "review_complete": false,
+      "actual_image_calls": 7,
+      "actual_unique_source_frames": 6,
+      "displayed_image_files": 7
+    },
+    {
+      "case": "mesh-after",
+      "computed_frames": 152,
+      "valid": true,
+      "review_complete": false,
+      "actual_image_calls": 5,
+      "actual_unique_source_frames": 4,
+      "displayed_image_files": 5
+    },
+    {
+      "case": "matlab-after",
+      "computed_frames": 190,
+      "valid": true,
+      "review_complete": false,
+      "actual_image_calls": 4,
+      "actual_unique_source_frames": 4,
+      "displayed_image_files": 4
+    },
+    {
+      "case": "caa-step3",
+      "computed_frames": 86,
+      "valid": true,
+      "review_complete": false,
+      "actual_image_calls": 20,
+      "actual_unique_source_frames": 20,
+      "displayed_image_files": 20
+    },
+    {
+      "case": "synthetic-demo",
+      "computed_frames": 12,
+      "valid": true,
+      "review_complete": false,
+      "actual_image_calls": 9,
+      "actual_unique_source_frames": 9,
+      "displayed_image_files": 9
+    }
+  ],
+  "restoration": {
+    "caa_paused_compute_frames": 20,
+    "caa_complete_compute_frames": 86,
+    "caa_container_declared_frames": 124,
+    "old_log_folder_required": false,
+    "real_retry_extracted_frames": 2
+  },
+  "export": {
+    "cases": 8,
+    "record_integrity_passed": 8,
+    "review_complete": 0,
+    "coverage_cli_exit_1": 8
+  },
+  "remote_ci_for_this_candidate": false,
+  "git_commit_created": false,
+  "git_tag_created": false,
+  "pushed": false,
+  "github_release_created": false,
+  "rights_scope": "Previously supplied recording and locally bundled software documentation were inspected locally. Only authored synthetic media is distributed.",
+  "time_scope": "Separate measured reviewer receipts and preparation commands; overlapping runs are not summed as elapsed task time. No long-video performance or token measurements.",
+  "release_checkout_checks": {
+    "tests": 16,
+    "passed": 16,
+    "skipped": 0,
+    "failed": 0,
+    "wall_seconds": 0.43278339999960735,
+    "scope": "documentation, example packaging and Git-index LF checks"
+  },
+  "skill_format_valid": true
+}

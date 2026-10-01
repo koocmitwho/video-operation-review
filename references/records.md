@@ -76,7 +76,7 @@ record-view 接收 asset ID、actor、tool、trace 和具体 observation。工�
 
 ## 校验与完成度
 
-`valid` 表示源视频、证据哈希和记录引用的完整性；`review_complete` 要求全帧计算、候选选择、候选原图查看和当前模式复核门禁均完成。默认 validate 按 valid 返回 0/1，`--require-coverage` 将 review_complete 加入退出条件。
+`valid` 表示源视频、证据哈希和记录引用的完整性；`review_complete` 要求全帧计算、候选选择、候选原图查看和当前模式复核门禁均完成。默认 validate 按 valid 返回 0/1，`--require-coverage` 将 review_complete 加入退出条件：记录有效但审阅未完成时仍为 `valid=true`、`review_complete=false`，退出码 1，门禁原因写入 `coverage_errors`，记录错误保留在 `errors`。
 
 source_verification 包含源路径、预期/当前 SHA-256、method 和 rehashed。文件属性匹配时复用扫描哈希，属性变化时重算；`--rehash-source` 显式触发完整哈希。导出报告分别展示记录完整性与审阅完成度。
 
@@ -111,3 +111,5 @@ source_verification 包含源路径、预期/当前 SHA-256、method 和 rehashe
 | semantic_completeness_proven | 语义完整性是否被证明；恒为 false |
 
 交付同时报告全帧计算、时间线粗审、操作精审、候选完成与实际图片查看登记，并附工具核对记录。
+
+已关联未解决疑点的操作区间仍可计入“已进行精审”，不计入“已完成精审”。关联采用区间 issue_ids、疑点 step_ids/step_id；没有显式步骤关联时使用相交帧范围。原步骤状态和疑点历史保留，报告标题将受疑点影响的 confirmed 步骤显示为待核实。

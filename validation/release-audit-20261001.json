@@ -1,0 +1,101 @@
+{
+  "date_utc": "2026-10-01",
+  "version": "0.1.0-rc.1",
+  "baseline_commit": "a6dbc742b023ffb42678ea9ee6e83eb8606151e6",
+  "decision": "conditionally acceptable for prerelease only; publish after matching remote CI passes",
+  "regression": [
+    {
+      "python": "3.12.10",
+      "tests": 152,
+      "passed": 152,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 112.009,
+      "log": "validation/tests-release-audit-python312.log"
+    },
+    {
+      "python": "3.10.11",
+      "tests": 152,
+      "passed": 152,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 153.726,
+      "log": "validation/tests-release-audit-python310.log"
+    }
+  ],
+  "fresh_frozen_install": {
+    "version": "0.1.0-rc.1",
+    "files": 85,
+    "archive_sha256": "80135320851d36dd446e3477a6a40b1b34df818816a00e7aa185a5d471cef79c",
+    "python": "3.12.10",
+    "commands": [
+      {
+        "command": "--version",
+        "exit": 0,
+        "no_site": true
+      },
+      {
+        "command": "--help",
+        "exit": 0,
+        "no_site": true
+      },
+      {
+        "command": "doctor",
+        "exit": 0,
+        "no_site": false
+      },
+      {
+        "command": "scan",
+        "exit": 0,
+        "no_site": false
+      },
+      {
+        "command": "plan",
+        "exit": 0,
+        "no_site": false
+      },
+      {
+        "command": "candidates",
+        "exit": 0,
+        "no_site": false
+      },
+      {
+        "command": "extract",
+        "exit": 0,
+        "no_site": false
+      },
+      {
+        "command": "validate",
+        "exit": 0,
+        "no_site": false
+      },
+      {
+        "command": "validate",
+        "exit": 1,
+        "no_site": false
+      },
+      {
+        "command": "export",
+        "exit": 0,
+        "no_site": false
+      }
+    ],
+    "doctor_ready": true,
+    "visual_review_status": "unverified",
+    "valid": true,
+    "review_complete": false,
+    "coverage_exit": 1,
+    "independent_human_semantic_test": false,
+    "scan_computed_frames": 12
+  },
+  "source_code_changed_during_audit": false,
+  "original_issues_total": 6,
+  "original_issues_fully_closed": 0,
+  "complete_reviews": 0,
+  "review_records": 8,
+  "semantic_accuracy": null,
+  "independent_human_annotations": false,
+  "distribution_rights": "MIT project; authored synthetic tutorial only; private recordings remain excluded",
+  "excluded_local_report": "prior blocked execution report, preserved locally and excluded from Git and ZIP",
+  "remote_ci": "pending at local audit; verify exact published commit and tag in workflow runs"
+}

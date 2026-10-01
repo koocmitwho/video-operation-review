@@ -3,6 +3,7 @@ import html
 import math
 from pathlib import Path
 from urllib.parse import quote
+from vor_store import issue_steps
 
 
 def text(value):
@@ -66,21 +67,12 @@ def timestamp(frame_no, frames):
     return f'源帧 {text(frame_no)}；{raw}；相对视频首帧：{relative}'
 
 
-def step_label(step):
+def step_label(step, issues=()):
+    if step.get('status') == 'confirmed' and any(
+            i.get('status') != 'resolved' and step['id'] in issue_steps(i, [step]) for i in issues):
+        return '部分确认，待核实（步骤登记为已确认）'
     return {'confirmed': '已确认（步骤登记）', 'partial': '部分确认，待核实',
             'unresolved': '待核实'}.get(step.get('status'), '状态未记录')
-
-
-def issue_steps(issue, steps):
-    explicit = issue.get('step_ids') or ([issue['step_id']] if issue.get('step_id') else [])
-    if explicit:
-        return list(explicit) if isinstance(explicit, list) else [explicit]
-    start, end = issue.get('start_frame'), issue.get('end_frame')
-    if type(start) is int and type(end) is int:
-        return [step['id'] for step in steps if type(step.get('start_frame')) is int
-                and type(step.get('end_frame')) is int
-                and step['start_frame'] <= end and step['end_frame'] >= start]
-    return []
 
 
 def unknown(value):
@@ -203,7 +195,7 @@ def render_report(report, work, frames):
         input_action = step.get('input_action')
         input_text = (text(input_action) if isinstance(input_action, str) and input_action.strip() else
                       '输入过程未单独记录；请结合确认动作与前后画面核对，阶段参数不代表输入动作。')
-        lines += [f"### {text(step['id'])} · {text(step.get('phase'))} · {step_label(step)}", '',
+        lines += [f"### {text(step['id'])} · {text(step.get('phase'))} · {step_label(step, issues)}", '',
                   f"起点：{timestamp(step.get('start_frame'), frames)}。", '',
                   f"终点：{timestamp(step.get('end_frame'), frames)}。", '',
                   f"软件 / 模块：{text(step.get('software'))} / {text(step.get('module'))}。", '',

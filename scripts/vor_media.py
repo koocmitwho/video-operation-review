@@ -430,13 +430,14 @@ def extract(conn, work, frames, ffmpeg='ffmpeg'):
     if not missing:
         return {'extracted_new': 0, 'assets': [f'f{n:09d}' for n in numbers]}
     (work / 'evidence').mkdir(exist_ok=True)
+    (work / 'logs').mkdir(exist_ok=True)
     attempt = begin_attempt(conn, 'extract', {'requested_frames': missing})
     log_rel = f'logs/extract-{attempt}.log'
     filter_file = work / 'logs' / f'extract-{attempt}.filter'
-    filter_file.write_text(compact_select(missing), encoding='utf-8')
     proc = None
     done = 0
     try:
+        filter_file.write_text(compact_select(missing), encoding='utf-8')
         with (work / log_rel).open('wb') as log:
             proc = decoder(source['path'], ffmpeg, log, filter_file, len(missing))
             with helper_deadline(proc, MEDIA_TIMEOUT) as progress:

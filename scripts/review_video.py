@@ -12,6 +12,8 @@ from vor_store import (candidate_manifest, database, dump, export_records, focus
 
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
+    bundle_version = (Path(__file__).resolve().parents[1] / 'VERSION').read_text(encoding='utf-8').strip()
+    p.add_argument('--version', action='version', version='video-operation-review ' + bundle_version)
     commands = p.add_subparsers(dest='command', required=True)
     doctor = commands.add_parser('doctor', help='检查本地 Python、图像库及 FFmpeg 环境。')
     doctor.add_argument('--ffmpeg', default=os.environ.get('VOR_FFMPEG') or 'ffmpeg')
@@ -102,7 +104,7 @@ def parser():
     subs['validate'].description = ('valid 表示源文件、证据与记录完整性；review_complete 表示候选查看及当前模式复核门禁完成。'
                                      '默认退出码按 valid 返回 0/1；--require-coverage 将审阅完成度加入退出状态。')
     subs['validate'].add_argument('--require-coverage', action='store_true',
-                                  help='要求完整审阅；待完成时 valid=false，退出码 1。')
+                                  help='要求完整审阅；待完成时退出码 1，valid 仍表示记录完整性。')
     for name in ('validate', 'export'):
         subs[name].add_argument('--rehash-source', action='store_true', help='本次重新计算源视频完整 SHA-256。')
     subs['validate'].add_argument('--mode', choices=['layered','strict'])
@@ -181,7 +183,8 @@ def main():
             else:
                 result = status(conn)
             print(dump(result))
-            return 1 if command == 'validate' and not result['valid'] else 0
+            return 1 if command == 'validate' and (not result['valid'] or
+                     (args.require_coverage and not result['review_complete'])) else 0
     except KeyboardInterrupt:
         print(dump({'error': 'Interrupted; committed rows retained. Run status then resume scan.'}))
         return 130

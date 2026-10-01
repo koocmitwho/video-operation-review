@@ -33,3 +33,5 @@ check_release.py 按字节计算哈希，因此行尾调整会显示 changed。�
 矩阵使用 Ubuntu 24.04 / Windows 2022 与 Python 3.10 / 3.12。Ubuntu 固定 [ffmpeg 7:6.1.1-3ubuntu5](https://packages.ubuntu.com/noble/ffmpeg)，Windows 固定 [ffmpeg 8.1.2](https://community.chocolatey.org/packages/ffmpeg/8.1.2)；安装后打印 ffmpeg/ffprobe 版本，再运行 doctor 和完整 unittest。远端结果按对应提交的工作流记录查阅。
 
 本地运行和远端 CI 分别留存，日期明确的历史结果持续保留。发布和提交按维护者的当前授权执行。
+
+固定版本从 [VERSION](../VERSION) 读取；`python scripts/review_video.py --version` 可在无第三方依赖时检查候选身份。首个候选的验收范围与交付见 [候选说明](release-candidate.md)。

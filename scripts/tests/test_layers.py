@@ -221,6 +221,45 @@ class LayerContract(unittest.TestCase):
         self.import_data({'intervals': [changed]})
         self.assertFalse(store.validate(self.conn, self.work)['review_complete'])
 
+    def test_coverage_requirement_keeps_integrity_and_completion_separate(self):
+        self.setup_interval()
+        for mode in ('layered', 'strict'):
+            with self.subTest(mode=mode):
+                result = store.validate(self.conn, self.work, require_coverage=True, mode=mode)
+                self.assertTrue(result['valid'], result['errors'])
+                self.assertEqual(result['errors'], [])
+                self.assertFalse(result['review_complete'])
+                self.assertIn('omission_gate_incomplete', {e['code'] for e in result['coverage_errors']})
+
+    def test_open_issue_keeps_examined_operation_out_of_completed_fine_count(self):
+        self.setup_interval()
+        self.seen([20])
+        item = self.interval()
+        item.update(disposition='operation', step_ids=['S1'], fine_status='reviewed')
+        self.import_data({'intervals': [item], 'steps': [self.step()]})
+        self.assertEqual(store.status(self.conn)['fine_reviewed_frames_recorded'], 32)
+        for association in ({'step_ids': ['S1']}, {'step_id': 'S1'}, {'start_frame': 0, 'end_frame': 31}):
+            with self.subTest(association=association):
+                issue = dict(id='Q1', question='是否保存以及交接到下一软件？', status='open', attempts=[], **association)
+                self.import_data({'issues': [issue]})
+                stats = store.status(self.conn)
+                self.assertEqual(stats['fine_examined_frames_recorded'], 32)
+                self.assertEqual(stats['fine_reviewed_frames_recorded'], 0)
+        issue['status'] = 'resolved'
+        self.import_data({'issues': [issue]})
+        self.assertEqual(store.status(self.conn)['fine_reviewed_frames_recorded'], 32)
+
+    def test_open_interval_issue_blocks_only_completed_fine_count(self):
+        self.setup_interval()
+        self.seen([20])
+        item = self.interval()
+        item.update(disposition='operation', step_ids=['S1'], fine_status='reviewed', issue_ids=['Q1'])
+        issue = dict(id='Q1', question='后续交接缺少画面', status='blocked', attempts=[])
+        self.import_data({'intervals': [item], 'steps': [self.step()], 'issues': [issue]})
+        stats = store.status(self.conn)
+        self.assertEqual(stats['fine_examined_frames_recorded'], 32)
+        self.assertEqual(stats['fine_reviewed_frames_recorded'], 0)
+
     def test_sample_cannot_be_filled_with_unrelated_or_overview_only_assets(self):
         layers=self.setup_interval()
         req=layers.sample_requirements(self.conn,self.interval())

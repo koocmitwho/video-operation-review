@@ -2,6 +2,8 @@
 
 [简体中文](README.md) | English
 
+Fixed prerelease candidate: **0.1.0-rc.1**. See [VERSION](VERSION) and the [candidate notes](references/release-candidate.md) for scope, compatibility changes, and release conditions.
+
 **A layered review skill for software screen recordings: reconstruct operations and preserve video frames.**
 
 Designed for step-by-step software tutorials covering modeling, programming, data processing, and similar tasks. It helps AI assistants with vision capabilities identify menu paths, selected objects, final parameter values, confirmation or cancellation, file handoffs, and visible results, producing operation records that can be checked and refined.
@@ -140,7 +142,7 @@ python scripts/review_video.py audit --work ./work/tutorial --summary
 python scripts/review_video.py export --work ./work/tutorial
 ```
 
-`valid` reports source, evidence-hash, and record integrity; `review_complete` reports candidate viewing and the current review gate. Default validate exits 0/1 according to valid; `--require-coverage` adds review completion to the exit condition. `--rehash-source` recomputes the source hash, and rehashed records this behavior. Export supports staged delivery with current status.
+`valid` reports source, evidence-hash, and record integrity; `review_complete` reports candidate viewing and the current review gate. Default validate exits 0/1 according to valid; `--require-coverage` adds review completion to the exit condition while retaining the meaning of valid: an intact but incomplete review returns `valid=true`, `review_complete=false`, exit code 1, and reasons in `coverage_errors`. `--rehash-source` recomputes the source hash, and rehashed records this behavior. Export supports staged delivery with current status.
 
 ## Output
 
@@ -172,6 +174,8 @@ An audit checks record consistency and interval coverage; viewing records are se
 
 ## Validation
 
+The `0.1.0-rc.1` candidate was prepared during 2026-09-30–2026-10-01. Each of two Windows/Python environments ran 152 tests: 151 passed, one skipped, none failed. The bounded internal review made 118 image calls covering 101 distinct clip-source frames. All eight records passed integrity checks; all eight reviews remain incomplete. The original six questions remain open, with three partially clarified; conflicting numeric reads remain null. There are no independent human labels, measured tokens, or remote CI results for this candidate. See the [candidate review summary](validation/rc-20260930.json) and [candidate notes](references/release-candidate.md).
+
 On 2026-09-29, the agent execution instructions and report delivery were updated. Windows with Python 3.12.10 and 3.10.11 each ran 145 checks with no failures; each canonical-directory run skipped one Git-index check, which was covered by 15 documentation checks in the release checkout. The final issue-impact display fix also passed 12 report tests in both environments. Three agents reviewed 8-, 26-, and 38-second excerpts from one real recording: 1,368 computed frames, 138 actual image calls, and 128 displayed frames deduplicated by excerpt source identity. All three records passed integrity checks; six source or handoff questions remain, and the complete-review gates did not pass. See the [acceptance summary](validation/agent-delivery-20260929.json) and the [self-contained synthetic example](examples/tutorial/report.md).
 
 After the 2026-09-27 fixes, **all 132 tests passed (34 added)** on Windows with Python 3.12.10 and 3.10.11, taking 93.525 and 135.805 seconds in separate serial runs. Logs: [Python 3.12](validation/tests-fixes-20260927.log), [Python 3.10](validation/tests-fixes-python310-20260927.log). `doctor` and the manual synthetic-GUI flow passed. See the [fix summary](validation/fixes-20260927.json).
@@ -187,6 +191,8 @@ python -X utf8 -m unittest discover -s scripts/tests -v
 ```
 
 In one trial using a 32-frame synthetic tutorial, the layered workflow displayed 18 distinct source frames, compared with 32 in strict mode. Both recorded [all 9 predefined key states](validation/layered-trial-truth.json) (historical trial summary), with 0 errors in the final parameter value.
+
+Those predefined states and prior agent answers support internal regression checks; they are not independent human ground truth or a measurement of semantic accuracy.
 
 On 2026-09-25, skill loading was verified in both hosts on Windows, along with actual visual review using `deepseek-flash` in DeepSeek Harness. On another 32-frame synthetic recording, it completed full-frame indexing, image viewing, operation records, validation, and export. Its 55 successful image calls covered 32 original images, 22 crops, and one overview sheet; the author reconciled tool records with evidence hashes, and the receipts are not published with the repository. It correctly identified the cancelled value `0.73`, final value `0.04`, filename `measurements.csv`, and imported row count `13`. Record validation passed; missing click actions and file-identity evidence remain unresolved, and the full review gate did not pass. This is a historical visual trial; the 2026-09-26 optimization checks use synthetic tests. See the corresponding commit's [CI](https://github.com/koocmitwho/video-operation-review/actions/workflows/tests.yml) for remote Windows/Linux results.
 

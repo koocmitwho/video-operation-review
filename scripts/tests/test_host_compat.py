@@ -52,6 +52,14 @@ class HostCompatibility(unittest.TestCase):
         self.assertIn('scan', process.stdout)
         self.assertEqual(list(self.cwd.iterdir()), [])
 
+    def test_fixed_bundle_version_is_readable_without_runtime_packages_or_work_directory(self):
+        process = self.cli('--version', no_site=True)
+        self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+        version = (CLI.parent.parent / 'VERSION').read_text(encoding='utf-8').strip()
+        self.assertRegex(version, r'^\d+\.\d+\.\d+(?:-rc\.\d+)?$')
+        self.assertEqual(process.stdout.strip(), 'video-operation-review ' + version)
+        self.assertEqual(list(self.cwd.iterdir()), [])
+
     def test_doctor_reports_all_missing_dependencies_without_creating_work(self):
         report = self.result(self.cli('doctor', no_site=True,
             env={'VOR_FFMPEG': str(self.cwd / 'absent-ffmpeg'),

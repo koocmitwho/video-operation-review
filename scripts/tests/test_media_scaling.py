@@ -56,6 +56,32 @@ class MediaScalingContract(unittest.TestCase):
                 self.assertEqual(image.getpixel((0, 0)), (n % 256, n // 256, 13))
         self.assertEqual(store.status(self.conn)['recorded_visual_unique_frames'], 0)
 
+    def test_restored_database_can_extract_without_historical_logs_directory(self):
+        media.scan(self.conn, self.work, self.small)
+        restored_work = self.work / 'restored'
+        restored = store.connect(restored_work, create=True)
+        self.addCleanup(restored.close)
+        self.conn.backup(restored)
+        try:
+            result = media.extract(restored, restored_work, [0, 7])
+        except OSError as exc:
+            self.fail(f'Restored evidence extraction must recreate its logs directory: {exc}')
+        self.assertEqual(result['extracted_new'], 2)
+        self.assertTrue((restored_work / 'logs').is_dir())
+        self.assertEqual(store.status(restored)['computed_frames'], 8)
+        self.assertEqual(store.status(restored)['recorded_visual_unique_frames'], 0)
+        self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM assets').fetchone()[0], 0)
+
+    def test_filter_write_failure_finishes_attempt_instead_of_leaving_it_running(self):
+        media.scan(self.conn, self.work, self.small)
+        with patch.object(Path, 'write_text', side_effect=OSError('fixture filter write failure')):
+            with self.assertRaisesRegex(OSError, 'fixture filter write failure'):
+                media.extract(self.conn, self.work, [0])
+        attempt = self.conn.execute("SELECT * FROM attempts WHERE kind='extract'").fetchone()
+        self.assertEqual(attempt['status'], 'failed')
+        self.assertIsNotNone(attempt['ended'])
+        self.assertIn('fixture filter write failure', attempt['error'])
+
     def test_decoder_filter_failure_reports_process_error_and_log(self):
         media.scan(self.conn, self.work, self.small)
         invalid_filter = self.work / 'invalid.filter'

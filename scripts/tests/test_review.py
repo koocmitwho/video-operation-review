@@ -414,7 +414,11 @@ class ReviewContract(unittest.TestCase):
         report = (self.work / 'report.md').read_text(encoding='utf-8')
         self.assertIn('记录完整性', report)
         self.assertIn('审阅完成度', report)
-        self.cli('validate', '--require-coverage', ok=False)
+        required = self.cli('validate', '--require-coverage', ok=False)
+        self.assertTrue(required['valid'], required['errors'])
+        self.assertFalse(required['review_complete'])
+        self.assertEqual(required['errors'], [])
+        self.assertIn('omission_gate_incomplete', {e['code'] for e in required['coverage_errors']})
 
     def test_validate_can_explicitly_rehash_unchanged_source(self):
         self.scan()
