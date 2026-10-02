@@ -98,6 +98,19 @@ class DocumentationContract(unittest.TestCase):
                 with self.subTest(file=file, option=option):
                     self.assertIn(option, text)
 
+    def test_current_validation_docs_keep_integrity_separate_from_completion(self):
+        # Current interface paragraphs must agree with the exercised CLI contract;
+        # dated release notes retain their historical wording and are out of scope.
+        for name in ('README.md', 'README.en.md', 'references/method.md', 'references/records.md'):
+            with self.subTest(name=name):
+                text = (ROOT / name).read_text(encoding='utf-8')
+                paragraph = next(line for line in text.splitlines()
+                                 if '`valid`' in line and '--require-coverage' in line)
+                self.assertNotRegex(paragraph, r'加入\s+`?valid',
+                                    'Coverage changes the exit condition, not record integrity.')
+                for field in ('valid=true', 'review_complete=false', 'coverage_errors'):
+                    self.assertIn(field, paragraph)
+
     def test_visible_key_states_have_frames_expectations_and_rules(self):
         path = ROOT / 'validation/layered-trial-truth.json'
         self.assertTrue(path.is_file())
@@ -158,7 +171,11 @@ class DocumentationContract(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             subprocess.run(['git', 'init', '--quiet', folder], check=True, capture_output=True, timeout=10)
             shutil.copyfile(ROOT / '.gitignore', Path(folder) / '.gitignore')
-            outputs = ['layer-plan.json', 'review.json', 'frames.jsonl', 'omission-audit.json', 'report.md', 'evidence/frame.png']
+            outputs = ['layer-plan.json', 'review.json', 'frames.jsonl', 'omission-audit.json',
+                       'report.md', 'evidence/frame.png', 'export-manifest.json', 'export.pending.json',
+                       '.export-local/staged-content.bin', '.export-local/previous/private-notes.txt',
+                       'case-review/export-manifest.json', 'case-review/export.pending.json',
+                       'case-review/.export-local/previous/private-ledger.json']
             result = subprocess.run(['git', '-C', folder, 'check-ignore', '-z', '--stdin'],
                                     input=('\0'.join(outputs)+'\0').encode(), capture_output=True, timeout=10)
             self.assertEqual(set(result.stdout.decode().rstrip('\0').split('\0')), set(outputs))

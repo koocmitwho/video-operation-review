@@ -1,0 +1,92 @@
+{
+  "record_type": "sanitized_local_repair_acceptance",
+  "date": "2026-10-02",
+  "timezone": "Asia/Shanghai",
+  "repair_baseline_commit": "4ace581b672836a5f7999476556ce2583e37fe38",
+  "tested_version_context": "Local review-integrity repairs before updating VERSION from 0.1.0-rc.2 to 0.1.0-rc.3.",
+  "verification_scope": "Local repair acceptance only; candidate retesting and commit-specific remote CI are separate evidence.",
+  "test_runs": [
+    {
+      "platform": "Windows",
+      "python": "3.12.10",
+      "numpy": "2.5.1",
+      "pillow": "12.3.0",
+      "ffmpeg": "8.1.2",
+      "location_kind": "isolated_git_copy",
+      "tests": 181,
+      "passed": 181,
+      "failed": 0,
+      "skipped": 0,
+      "elapsed_seconds": 163.798,
+      "exit_code": 0
+    },
+    {
+      "platform": "Windows",
+      "python": "3.10.11",
+      "numpy": "2.2.6",
+      "pillow": "12.0.0",
+      "ffmpeg": "8.1.2",
+      "location_kind": "isolated_git_copy",
+      "tests": 181,
+      "passed": 181,
+      "failed": 0,
+      "skipped": 0,
+      "elapsed_seconds": 214.210,
+      "exit_code": 0
+    }
+  ],
+  "legacy_validation": {
+    "isolated_copies": 8,
+    "valid": 8,
+    "incomplete_reviews": 8,
+    "coverage_validation_exit_code_each": 1,
+    "recorded_content_preserved": true,
+    "original_evidence_gaps_remaining": 6,
+    "original_evidence_gaps_closed": 0
+  },
+  "public_synthetic_workflow": {
+    "computed_frames": 12,
+    "candidate_frames": 9,
+    "actual_fresh_image_views": 5,
+    "candidates_pending": 4,
+    "partial_steps": 3,
+    "open_issues": 1,
+    "valid": true,
+    "review_complete": false,
+    "default_validation_exit_code": 0,
+    "coverage_validation_exit_code": 1,
+    "export_exit_code": 0,
+    "four_file_hashes_sizes_and_generation_match": true,
+    "pending_absent_after_export": true,
+    "basis": "known_synthetic_sample_internal_consistency_not_independent_human_ground_truth"
+  },
+  "compatibility": {
+    "schema_version": 3,
+    "valid_legacy_records_supported": true,
+    "cross_batch_id_updates_supported": true,
+    "strict_mode_retained": true,
+    "video_inputs": ["self-contained Matroska/WebM", "self-contained AVI", "self-contained MOV/MP4"],
+    "subtitle_inputs": ["UTF-8 SRT", "UTF-8 VTT", "embedded text subtitles in supported containers"],
+    "export_manifest_version": 1,
+    "export_power_loss_atomicity_guaranteed": false,
+    "automatic_pending_recovery": false
+  },
+  "remote_ci": {
+    "included_in_this_record": false,
+    "basis": "Consult the workflow runs for the actual release commit; do not infer them from these local repair results."
+  },
+  "limitations": [
+    "No independent human semantic accuracy measurement.",
+    "No new in-application user reproduction acceptance.",
+    "No long-video throughput or full resource benchmark.",
+    "No new macOS installation or cross-language/cross-application blind evaluation.",
+    "Legacy media and ledgers were inspected only through authorized isolated copies and remain private.",
+    "A complete export manifest proves file-group consistency, not complete review or semantic correctness."
+  ],
+  "distribution": {
+    "private_media_ledgers_and_tool_receipts_included": false,
+    "personal_paths_included": false,
+    "runtime_binaries_included": false,
+    "public_media": "project-authored synthetic example only"
+  }
+}

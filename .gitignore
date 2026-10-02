@@ -26,6 +26,9 @@ review.json
 frames.jsonl
 omission-audit.json
 report.md
+export-manifest.json
+export.pending.json
+.export-*/
 evidence/
 
 # The authored synthetic demonstration is part of the distributable skill.

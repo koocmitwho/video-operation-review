@@ -4,7 +4,7 @@
 
 ## 目录与身份
 
-每个 `--work` 包含 `review.sqlite3`、`logs/` 和按需产生的 `evidence/`；export 生成 `review.json`、`frames.jsonl`、`omission-audit.json`、`report.md`。输入视频保留在 source.path。迁移缓存时保留数据库和证据；活动库使用 SQLite backup，或结束写入并正常关闭数据库后复制。
+每个 `--work` 包含 `review.sqlite3`、`logs/` 和按需产生的 `evidence/`；export 生成 `review.json`、`frames.jsonl`、`omission-audit.json`、`report.md` 及 `export-manifest.json`。输入视频保留在 source.path，并需满足 [自包含媒体边界](method.md)。迁移缓存时保留数据库和证据；活动库使用 SQLite backup，或结束写入并正常关闭数据库后复制。
 
 源帧身份为“源文件 SHA-256 + v:0 + 0 起始 frame_no”。全图 ID 如 `f000000003`，裁剪 ID 附带坐标并继承源帧。查看事件按该身份去重，精确重复段另外保留代表映射。
 
@@ -66,6 +66,8 @@
 
 分层记录补充 author、transition、role_evidence、intervals、抽查和复核，见 [layered-review.md](layered-review.md)。严格模式的 coverage 和 omission_reviews 见 [omission-review.md](omission-review.md)。多位审阅者返回相同结构及实际工具引用，由单一记录者核对后串行导入。稳定 ID 用于更新，history 保留版本。
 
+`steps` 和 `issues` 中的 ID 必须是非空字符串；同一批各自列表中不能重复，跨批同 ID 更新继续保留。导入先校验整批，再进入写入事务；类型或同批 ID 冲突会给出如 `steps[0].role_evidence` 的字段位置，整批不会部分写入。已知 `role_evidence`、`transition` 及其受支持子字段须符合文档结构；所有 `evidence` 引用均为非空资产 ID 的列表，JSON 数值须有限。尚未提供的语义证据仍由审计列为缺口，不能为通过结构校验补造事实。未知扩展字段仍保留，schema 继续为 3。
+
 ## 查看登记
 
 record-view 接收 asset ID、actor、tool、trace 和具体 observation。工具类型为 view_image、read_image、image_tool、visible_attachment；封装工具的实际名称写入 trace。
@@ -79,6 +81,24 @@ record-view 接收 asset ID、actor、tool、trace 和具体 observation。工�
 `valid` 表示源视频、证据哈希和记录引用的完整性；`review_complete` 要求全帧计算、候选选择、候选原图查看和当前模式复核门禁均完成。默认 validate 按 valid 返回 0/1，`--require-coverage` 将 review_complete 加入退出条件：记录有效但审阅未完成时仍为 `valid=true`、`review_complete=false`，退出码 1，门禁原因写入 `coverage_errors`，记录错误保留在 `errors`。
 
 source_verification 包含源路径、预期/当前 SHA-256、method 和 rehashed。文件属性匹配时复用扫描哈希，属性变化时重算；`--rehash-source` 显式触发完整哈希。导出报告分别展示记录完整性与审阅完成度。
+
+旧库中的非法步骤或疑点会返回 `errors` 中的 `invalid_step` / `invalid_issue` 及 `record_contract_errors`，不会自动删除或修写原记录。`status` 同样提供诊断，`annotation_counts_available=false` 时相关粗审、精审与操作计数/范围为 null；null 表示无法可靠统计，不是零。此时审计显示 `blocked_invalid_records`，导出在更新任何交付文件前拒绝，先根据字段诊断在保留原记录的前提下修正。结构有效仍不证明自由文字与视频一致。
+
+报告还会将能够关联到步骤或参数的审计冲突、证据缺口显示为待核实，保留原记录状态、参数值、发现代码和证据。能定位参数键的参数内部矛盾只降级对应参数；其他步骤不会仅因整个审阅尚未完成而被一并降级。这是呈现当前审计结果，不改写原始判断或关闭疑点。
+
+## 导出代次与中断检查
+
+正常导出保留上述四个固定交付文件名，并最后生成 `export-manifest.json`。清单字段为 `version: 1`、`state: "complete"`、`generation` 和 `files`；每个文件条目含 `sha256` 与字节数 `size`。CLI 返回值增加 `export_manifest` 与 `generation`。`review.json`、`omission-audit.json` 含 `export_generation`，`report.md` 末尾的 HTML 注释保留同一代次；`frames.jsonl` 通过清单哈希归属于该代。
+
+消费一组新交付时按次序检查：
+
+1. 工作目录不存在 `export.pending.json`；存在时不要读取为已完成的一代。
+2. 清单为 `version=1`、`state=complete`，四个文件均存在，大小和 SHA-256 与清单一致。
+3. 两份 JSON 与报告注释的代次对应清单 `generation`。清单描述导出文件组完整性，不表示 `review_complete=true` 或语义正确。
+
+全部内容先生成到本工作目录下独立的 `.export-*` 目录，文件切换前写入 `export.pending.json`。普通切换异常会尝试恢复上一代；回滚失败或进程在切换期间被终止时，pending 和可用的暂存/`previous` 备份保留，下一次 export 会拒绝覆盖。先保留现场，核对 pending 指向的目录、备份与清单，再决定恢复哪一代；不要在未核对文件前删除 pending，也不要把手工删除标记当成恢复。程序不自动恢复，跨文件替换不保证断电原子性。
+
+旧导出没有清单时仍作为旧格式记录保留，不要求删除，也不能倒推它已经经过代次校验。继续使用有效的旧库导出即可产生新清单；schema 3 与旧固定链接保持兼容。
 
 ## 统计字段
 

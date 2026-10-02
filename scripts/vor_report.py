@@ -67,9 +67,9 @@ def timestamp(frame_no, frames):
     return f'源帧 {text(frame_no)}；{raw}；相对视频首帧：{relative}'
 
 
-def step_label(step, issues=()):
-    if step.get('status') == 'confirmed' and any(
-            i.get('status') != 'resolved' and step['id'] in issue_steps(i, [step]) for i in issues):
+def step_label(step, issues=(), findings=()):
+    if step.get('status') == 'confirmed' and (findings or any(
+            i.get('status') != 'resolved' and step['id'] in issue_steps(i, [step]) for i in issues)):
         return '部分确认，待核实（步骤登记为已确认）'
     return {'confirmed': '已确认（步骤登记）', 'partial': '部分确认，待核实',
             'unresolved': '待核实'}.get(step.get('status'), '状态未记录')
@@ -99,9 +99,11 @@ def parameter_value(value):
     return result, actual
 
 
-def parameter_scope(step, actual, issues, record_valid):
+def parameter_scope(step, actual, issues, record_valid, findings=()):
     if not record_valid:
         return '生效未核实（记录完整性待修复）'
+    if findings:
+        return '生效未核实（审计发现冲突或证据缺口）'
     blocked = any(issue.get('status') != 'resolved' and step['id'] in issue_steps(issue, [step]) for issue in issues)
     if step.get('status') != 'confirmed' or step.get('uncertainties') or unknown(actual) or blocked:
         return '生效未核实'
@@ -111,6 +113,47 @@ def parameter_scope(step, actual, issues, record_valid):
         if item.get('status') != 'observed' and not (item.get('status') == 'not_applicable' and item.get('note')):
             return '生效未核实（确认或结果依据未记录）'
     return f"{text(step['id'])} 完成后（按该步骤记录）"
+
+
+def affected_steps(steps, audit):
+    """Use explicit audit links; global coverage/review gaps do not negate every step."""
+    codes = {'final_parameter_mismatch', 'state_discontinuity', 'confirmation_gap', 'result_gap',
+             'step_transition_missing', 'step_state_missing', 'state_fact_invalid', 'state_value_unknown',
+             'step_ranges_overlap', 'audit_evidence_missing', 'audit_evidence_unreviewed'}
+    result = {step['id']: [] for step in steps}
+    for finding in audit.get('findings', []):
+        if finding.get('code') not in codes:
+            continue
+        owner_fields = ('step_id', 'previous_step', 'next_step')
+        explicit_owner = any(key in finding for key in owner_fields)
+        ids = {finding[key] for key in owner_fields if isinstance(finding.get(key), str)}
+        reference = finding.get('reference')
+        linked_finding = finding
+        if not explicit_owner and isinstance(reference, str):
+            # Older findings encoded owner/role/key into a dotted string. Legal IDs
+            # can contain those same separators, so an ambiguous match is not fact.
+            matching = [ident for ident in result if reference == ident or reference.startswith(ident + '.')]
+            ids.update(matching)
+            if len(matching) > 1:
+                linked_finding = dict(finding, _report_ambiguous_step_ids=sorted(matching))
+        for ident in ids:
+            if ident in result:
+                result[ident].append(linked_finding)
+    return result
+
+
+def parameter_findings(findings, name):
+    """Old conflicts without a parameter key conservatively affect the whole step."""
+    return [finding for finding in findings if finding['code'] != 'final_parameter_mismatch'
+            or not finding.get('parameter_key') or finding['parameter_key'] == name]
+
+
+def finding_reason(finding):
+    # Called only for the fixed, known codes selected by affected_steps.
+    reason = f"`{finding['code']}`：{text(finding.get('message', '需核实记录和证据'))}"
+    if finding.get('_report_ambiguous_step_ids'):
+        reason += '（旧发现的步骤引用存在歧义，候选：' + readable(finding['_report_ambiguous_step_ids']) + '；归属待核实）'
+    return reason
 
 
 def references(ids, assets):
@@ -152,7 +195,9 @@ def render_report(report, work, frames):
     open_issues = [i for i in issues if i.get('status') != 'resolved']
     assets = {a['id']: a for a in report.get('assets', [])}
     result = report['validation']
+    findings_by_step = affected_steps(steps, report.get('coverage_audit') or {})
     confirmed = [s for s in steps if s.get('status') == 'confirmed' and not s.get('uncertainties')
+                 and not findings_by_step[s['id']]
                  and not any(s['id'] in issue_steps(i, steps) for i in open_issues)]
     pending = [s for s in steps if s not in confirmed]
     if not result['valid']:
@@ -184,22 +229,33 @@ def render_report(report, work, frames):
             detail = value if isinstance(value, dict) else {}
             basis = text(detail['basis']) + '；' if detail.get('basis') else ''
             refs = references(detail.get('evidence', []), assets)
+            findings = parameter_findings(findings_by_step[step['id']], name)
+            diagnostics = '；' + '；'.join(finding_reason(f) for f in findings) if findings else ''
             lines.append(f"| {text(step['id'])} / {text(step.get('phase'))} | {readable(step.get('selected_objects', []))} | "
-                         f"{text(name)} | {shown} | {parameter_scope(step, actual, issues, result['valid'])} | {basis}{refs} |")
+                         f"{text(name)} | {shown} | {parameter_scope(step, actual, issues, result['valid'], findings)} | {basis}{refs}{diagnostics} |")
     if not parameter_count:
         lines += ['| — | — | 尚无参数记录 | 未知 | 生效未核实 | — |']
     lines += ['', '## 操作步骤', '']
     if not steps:
         lines += ['尚无操作步骤。', '']
     for step in steps:
+        step_findings = findings_by_step[step['id']]
         input_action = step.get('input_action')
         input_text = (text(input_action) if isinstance(input_action, str) and input_action.strip() else
                       '输入过程未单独记录；请结合确认动作与前后画面核对，阶段参数不代表输入动作。')
-        lines += [f"### {text(step['id'])} · {text(step.get('phase'))} · {step_label(step, issues)}", '',
+        lines += [f"### {text(step['id'])} · {text(step.get('phase'))} · {step_label(step, issues, step_findings)}", '',
                   f"起点：{timestamp(step.get('start_frame'), frames)}。", '',
                   f"终点：{timestamp(step.get('end_frame'), frames)}。", '',
-                  f"软件 / 模块：{text(step.get('software'))} / {text(step.get('module'))}。", '',
-                  f"1. **点击哪里**：{' → '.join(readable(v) for v in step.get('menu_path', [])) or '入口未记录'}。",
+                  f"软件 / 模块：{text(step.get('software'))} / {text(step.get('module'))}。", '']
+        if step_findings:
+            lines += ['当前审计发现冲突或证据缺口；下方保留原操作记录，需核实后使用。', '']
+            for finding in step_findings:
+                suggested = set(finding.get('suggested_frames', []))
+                refs = [ident for ident in step.get('evidence', []) if ident in assets and assets[ident]['frame_no'] in suggested]
+                refs = refs or step.get('evidence', [])
+                lines.append(f"- {finding_reason(finding)}；该步骤证据：{references(refs, assets)}。")
+            lines += ['']
+        lines += [f"1. **点击哪里**：{' → '.join(readable(v) for v in step.get('menu_path', [])) or '入口未记录'}。",
                   f"2. **选择什么**：{readable(step.get('selected_objects', []))}。",
                   f'3. **填写什么**：{input_text}']
         params = step.get('final_parameters') or {}
@@ -207,7 +263,8 @@ def render_report(report, work, frames):
                   f"5. **应看到什么**：{text(step.get('visible_result'))}", '']
         if params:
             lines += ['阶段参数记录：' + '；'.join(f'{text(k)} = {parameter_value(v)[0]}' for k, v in params.items()) + '。']
-            if any('生效未核实' in parameter_scope(step, parameter_value(v)[1], issues, result['valid']) for v in params.values()):
+            if any('生效未核实' in parameter_scope(step, parameter_value(value)[1], issues, result['valid'],
+                    parameter_findings(step_findings, name)) for name, value in params.items()):
                 lines += ['此处包含待核实值，生效范围见上表。']
             lines += ['']
         for key, label in [('input_files', '输入文件'), ('output_files', '输出文件')]:

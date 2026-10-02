@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | English
 
-Fixed prerelease candidate: **0.1.0-rc.2**. See [VERSION](VERSION), the [RC.2 notes](references/release-rc2.md) for this release's scope, and the [RC.1 notes](references/release-candidate.md) for the first candidate's compatibility changes.
+Fixed prerelease candidate: **0.1.0-rc.3**. See [VERSION](VERSION) and the [RC.3 notes](references/release-rc3.md) for this candidate's scope and compatibility boundaries; earlier candidates are documented in the [RC.2 notes](references/release-rc2.md) and [RC.1 notes](references/release-candidate.md).
 
 **A layered review skill for software screen recordings: reconstruct operations and preserve video frames.**
 
@@ -32,6 +32,8 @@ Both the model and the current host need actual image input; a text-only model w
 
 Validated on Windows with Python 3.10.11 and Python 3.12.10, using FFmpeg 8.1.2.
 Current coverage is a single video stream with common 8-bit encodings; high bit depth, dynamic resolution, and other platform combinations are unverified.
+
+Video inputs are limited to local, self-contained Matroska/WebM, AVI, and MOV/MP4 files. The policy checks actual content and internal references rather than trusting the extension. Playlists, concatenation manifests, image sequences, MOV/MP4 files that reference external media, and other formats are rejected; sources in existing review databases must meet the same boundary. Sidecar subtitles still support UTF-8 SRT/VTT. See [processing methods](references/method.md) for the detailed limits.
 
 If you need to install the Python dependencies, use your own virtual environment:
 
@@ -144,6 +146,8 @@ python scripts/review_video.py export --work ./work/tutorial
 
 `valid` reports source, evidence-hash, and record integrity; `review_complete` reports candidate viewing and the current review gate. Default validate exits 0/1 according to valid; `--require-coverage` adds review completion to the exit condition while retaining the meaning of valid: an intact but incomplete review returns `valid=true`, `review_complete=false`, exit code 1, and reasons in `coverage_errors`. `--rehash-source` recomputes the source hash, and rehashed records this behavior. Export supports staged delivery with current status.
 
+Imported step and issue IDs must be nonempty strings and unique within their respective list in one batch; later batches can still update the same ID. Invalid types in known fields are rejected before writing, with the field location in the error. Invalid steps or issues already in a database are diagnosed and block export, while the original records remain available for correction. Reports mark locatable audit conflicts or evidence gaps on the affected steps and parameters, retaining the original values and evidence; they still cannot automatically decide whether free text matches the video. See the [record contract](references/records.md).
+
 ## Output
 
 | File | Contents |
@@ -154,7 +158,10 @@ python scripts/review_video.py export --work ./work/tutorial
 | `frames.jsonl` | Per-frame indexes and change metrics |
 | `omission-audit.json` | Results of coverage, continuity, sampling, and review checks |
 | `report.md` | Readable operation instructions, screenshots, and unresolved questions |
+| `export-manifest.json` | Export generation and the sizes and SHA-256 hashes of the four delivery files above |
 | `evidence/` | Original images, crops, and overview contact sheets exported as needed |
+
+Before consuming a new export, check that `export.pending.json` is absent, then verify the `state=complete`, generation, and four file hashes in `export-manifest.json`. If pending exists, preserve it, its referenced `.export-*` staging directory, and the `previous` backups for inspection or restoration of the preceding generation. Do not delete the marker merely to continue; recovery is not automatic. Replacing the file group is not an atomic transaction across power loss. Exports without a manifest remain legacy-format output and need not be deleted; see the [record contract](references/records.md) for the full checks.
 
 Input videos, review databases, and evidence may contain the user's own content. Keep them in their respective working directories.
 Each `--work` is written serially by one recorder; multiple reviewers produce their own records and import them by ID.
@@ -173,6 +180,8 @@ Original images, crops, enlarged views, and contact-sheet panels from the same s
 An audit checks record consistency and interval coverage; viewing records are self-reported and are not independent verification.
 
 ## Validation
+
+The 2026-10-02 review-integrity repair acceptance ran in an isolated Git copy on Windows: Python 3.12.10 and 3.10.11 each passed 181 tests with no failures or skips, taking 163.798 and 214.210 seconds respectively. These are repair-stage results recorded before the version update, not a replacement for RC.3 candidate retesting or commit-specific remote CI. All eight isolated legacy ledgers remain `valid=true`, `review_complete=false`, and the six original evidence gaps remain unresolved. The public synthetic sample reached staged export after five actual image views; the four-file manifest hashes and generation matched. This is not an independent human measure of semantic accuracy. See the [sanitized repair acceptance summary](validation/fixes-20261002.json) for scope and limitations and the [RC.3 notes](references/release-rc3.md) for compatibility changes.
 
 The [local repair review on 2026-10-01](references/rc1-repair.md) reproduced lost observations on repeated consolidation, duplicate investigation entries, and contradictory record prose in the private acceptance script. The production CLI implementation is unchanged. A user confirmed an AI draft for one real 38-second clip; it is a reference for that clip, not blind annotation or an accuracy claim for other videos. The six original questions and eight incomplete reviews remain open. `0.1.0-rc.2` includes the sanitized summary, consolidation patch, and optional regression; see the [RC.2 notes](references/release-rc2.md).
 

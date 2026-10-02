@@ -10,13 +10,14 @@ import vor_media as media
 from vor_store import dump, get_meta, log_history, now, ranges, sha256
 from vor_media import bind_source, finite_float, helper_attempt, run_helper, version
 from vor_layers import canonical_hash
+from vor_input_policy import input_options
 
 
 def tracks(conn,ffprobe='ffprobe'):
     with helper_attempt(conn, 'tracks'):
         source=get_meta(conn,'source')
         bind_source(conn,source['path'])
-        p=run_helper([ffprobe,'-v','error','-show_streams','-of','json',source['path']],capture_output=True)
+        p=run_helper([ffprobe,'-v','error',*input_options(source['path']),'-show_streams','-of','json',source['path']],capture_output=True)
         if p.returncode: raise ValueError(p.stderr.decode('utf-8',errors='replace'))
         streams=json.loads(p.stdout)['streams']
         simplify=lambda s:{k:s.get(k) for k in ('index','codec_name','codec_type','start_time','duration','tags')}
@@ -143,12 +144,13 @@ def _index_key(conn):
 def import_subtitles(conn,work,path,offset=0.0,language='und',stream=0,ffmpeg='ffmpeg'):
     with helper_attempt(conn, 'subtitles'):
         offset=_number(offset); path=Path(path).resolve(strict=True)
+        options=input_options(path,allow_subtitles=True)
         if type(stream) is not int or stream<0: raise ValueError('Subtitle stream is a nonnegative s:N ordinal.')
         source=dict(path=str(path),sha256=sha256(path),kind='subtitle',stream=f's:{stream}',parser='FFmpeg',version=version(ffmpeg))
         key='lang-'+canonical_hash([source,offset,language,_index_key(conn)])[:24]
         cached=_cached(conn,key)
         if cached: return cached
-        p=run_helper([ffmpeg,'-hide_banner','-nostdin','-v','error','-copyts','-i',str(path),'-map',f'0:s:{stream}',
+        p=run_helper([ffmpeg,'-hide_banner','-nostdin','-v','error','-copyts',*options,'-i',str(path),'-map',f'0:s:{stream}',
                           '-c:s','srt','-f','srt','pipe:1'],capture_output=True,timeout=media.MEDIA_TIMEOUT)
         logdir=Path(work)/'logs'; logdir.mkdir(exist_ok=True)
         (logdir/(key+'.log')).write_bytes(p.stderr)

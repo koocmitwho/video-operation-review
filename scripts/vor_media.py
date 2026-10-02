@@ -14,6 +14,7 @@ from PIL import Image
 
 from vor_store import (asset_path, begin_attempt, dump, end_attempt, get_meta, log_history,
                        now, require_asset, set_meta, sha256, source_file_identity, status)
+from vor_input_policy import input_options, require_self_contained
 
 
 PROBE_TIMEOUT = 30.0
@@ -94,13 +95,23 @@ def helper_deadline(proc, timeout):
 
 
 @contextmanager
-def helper_attempt(conn, kind):
+def helper_attempt(conn, kind, work=None):
     attempt = begin_attempt(conn, kind)
     try:
         yield
     except BaseException as exc:
+        error = str(exc) or type(exc).__name__
+        log_path = None
+        if work is not None:
+            try:
+                logs = Path(work) / 'logs'
+                logs.mkdir(exist_ok=True)
+                log_path = f'logs/{kind}-{attempt}.log'
+                (Path(work) / log_path).write_text(error + '\n', encoding='utf-8')
+            except OSError:
+                log_path = None  # The persisted attempt still retains the original error.
         end_attempt(conn, attempt, 'interrupted' if isinstance(exc, KeyboardInterrupt) else 'failed',
-                    error=str(exc) or type(exc).__name__)
+                    error=error, log_path=log_path)
         raise
     else:
         end_attempt(conn, attempt, 'complete')
@@ -126,6 +137,7 @@ def source_identity(video):
 
 
 def bind_source(conn, video):
+    require_self_contained(video)
     source, cache, _ = source_file_identity(video, get_meta(conn, 'source_hash_cache'))
     old = get_meta(conn, 'source')
     if old and (old['sha256'] != source['sha256'] or old['size'] != source['size']):
@@ -137,6 +149,7 @@ def bind_source(conn, video):
 
 
 def index_video(conn, work, video, ffprobe='ffprobe', checkpoint=100):
+    options = input_options(video)
     if get_meta(conn, 'index_complete_clean', False):
         return
     work = Path(work)
@@ -147,7 +160,7 @@ def index_video(conn, work, video, ffprobe='ffprobe', checkpoint=100):
     proc = None
     try:
         with (work / log_rel).open('wb') as log:
-            meta = run_helper([ffprobe, '-v', 'error', '-select_streams', 'v:0', '-show_streams',
+            meta = run_helper([ffprobe, '-v', 'error', *options, '-select_streams', 'v:0', '-show_streams',
                                    '-show_format', '-of', 'json', str(video)],
                               stdout=subprocess.PIPE, stderr=log)
             if meta.returncode:
@@ -164,7 +177,7 @@ def index_video(conn, work, video, ffprobe='ffprobe', checkpoint=100):
                 set_meta(conn, 'index_complete_clean', False)
             entries = ('frame=pts,pts_time,best_effort_timestamp,best_effort_timestamp_time,'
                        'width,height,key_frame,duration_time')
-            proc = subprocess.Popen([ffprobe, '-v', 'error', '-select_streams', 'v:0',
+            proc = subprocess.Popen([ffprobe, '-v', 'error', *options, '-select_streams', 'v:0',
                                      '-show_frames', '-show_entries', entries, '-of', 'compact=p=0:nk=0', str(video)],
                                     stdout=subprocess.PIPE, stderr=log, **process_options(timeout=None))
             with helper_deadline(proc, INDEX_TIMEOUT) as progress:
@@ -275,7 +288,7 @@ def _filter_file_option(ffmpeg):
 
 def decoder(video, ffmpeg, log, filter_file=None, count=None):
     args = [ffmpeg, '-hide_banner', '-nostdin', '-v', 'error', '-noautorotate', '-copyts',
-            '-i', str(video), '-map', '0:v:0', '-an', '-sn', '-dn']
+            *input_options(video), '-i', str(video), '-map', '0:v:0', '-an', '-sn', '-dn']
     if filter_file:
         args += [_filter_file_option(ffmpeg), str(filter_file)]
     args += ['-fps_mode', 'passthrough', '-c:v', 'ppm', '-pix_fmt', 'rgb24']
@@ -315,7 +328,8 @@ def scan(conn, work, video, ffmpeg='ffmpeg', ffprobe='ffprobe', tile_size=32,
         raise ValueError('tile_size/checkpoint must be positive; pixel_threshold must be 1..255.')
     if max_new_frames is not None and max_new_frames < 1:
         raise ValueError('max_new_frames must be positive when given.')
-    source = bind_source(conn, video)
+    with helper_attempt(conn, 'input_policy', work=work):
+        source = bind_source(conn, video)
     with helper_attempt(conn, 'probe'):
         ffmpeg_version = version(ffmpeg)
     config = {'tile_size': tile_size, 'pixel_threshold': pixel_threshold,

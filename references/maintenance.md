@@ -34,4 +34,4 @@ check_release.py 按字节计算哈希，因此行尾调整会显示 changed。�
 
 本地运行和远端 CI 分别留存，日期明确的历史结果持续保留。发布和提交按维护者的当前授权执行。
 
-固定版本从 [VERSION](../VERSION) 读取；`python scripts/review_video.py --version` 可在无第三方依赖时检查候选身份。首个候选的验收范围与交付见 [候选说明](release-candidate.md)。
+固定版本从 [VERSION](../VERSION) 读取；`python scripts/review_video.py --version` 可在无第三方依赖时检查候选身份。当前候选的验收范围与兼容边界见 [RC.3 说明](release-rc3.md)，首个候选的历史交付见 [候选说明](release-candidate.md)。

@@ -6,6 +6,10 @@
 
 `scan` 绑定本地视频的绝对路径、字节数和 SHA-256。使用第一个视频流 `v:0`，保存容器元数据和逐帧信息：0 起始呈现顺序帧号、原始整数 PTS、PTS 秒、best-effort 时间、尺寸、帧时长及编码关键帧标志。
 
+视频入口仅支持本地自包含的 Matroska/WebM、AVI、MOV/MP4。程序按文件内容识别容器；MOV/MP4 还检查内部引用和容器结构。播放列表、ffconcat 等拼接清单、图像序列及其他格式不受支持，即使改成 `.mkv` 或 `.mp4` 扩展名也不会放行。MOV/MP4 的外部数据引用、压缩或引用电影、独立媒体分片及图像项依赖同样拒绝。此边界使源文件本身的字节能够代表受支持的媒体来源，不承诺所有这些容器变体都可读。
+
+读取媒体的 ffprobe/FFmpeg 调用只允许本地 file 协议及已识别容器对应的解复用器，不读取清单所指向的其他素材。新扫描的输入策略拒绝返回 `unsupported_media_input`，保留 failed 的 `input_policy` attempt 与日志；旧库校验的来源拒绝使用 `source_unsupported_media_input`。已有库不能凭旧索引绕过检查，程序不自动转换源文件或改写旧源身份。SRT/VTT 独立字幕和受支持容器内的文本字幕继续使用同一入口限制；外部转写 JSON 仍按 [语言接口](language.md) 导入。高位深、动态分辨率和多视频流的支持范围不因此扩大。
+
 `validate` 与 `export` 核对源路径和内容身份。源文件缺失返回 `source_missing`，SHA-256 变化返回 `source_hash_mismatch`，均计入 `errors`。源文件大小、纳秒时间、设备和文件标识一致时复用扫描哈希；Windows 还比较文件变更时间。属性变化或旧库缺少属性缓存时重新读取 SHA-256，读取前后核对属性。
 
 `source_verification.rehashed` 记录本次是否重算；`method` 为 `sha256_recomputed` 或 `cached_sha256_stat_match`。`validate --rehash-source` 和 `export --rehash-source` 可显式重算完整文件哈希。哈希缓存单独存入 meta，保持原有 source 身份与复核快照稳定。
@@ -52,6 +56,8 @@ FFmpeg 使用 `-noautorotate`、`-copyts`、`-fps_mode passthrough`，通过 PPM
 
 ## 校验与导出
 
-`valid` 表示源文件、证据与记录完整性；`review_complete` 要求全帧计算完成、候选选择及查看完成，并通过当前模式复核门禁。默认 validate 按 valid 返回 0/1；`--require-coverage` 将完整审阅条件加入 valid 与退出状态。export 保留当前验证结果并输出可继续完善的报告。
+`valid` 表示源文件、证据与记录完整性；`review_complete` 要求全帧计算完成、候选选择及查看完成，并通过当前模式复核门禁。默认 validate 按 valid 返回 0/1；`--require-coverage` 将完整审阅条件加入退出条件，不改变 valid 的含义：有效但尚未完成的记录仍返回 `valid=true`、`review_complete=false`，退出码为 1，未完成原因写入 `coverage_errors`。export 保留当前验证结果并输出可继续完善的报告。
+
+导出先在本工作目录的独立暂存目录生成全部文件，再切换固定文件名，最后写出完整代次清单。消费者必须同时检查 pending 标记和清单中的文件摘要；不能仅凭 `report.md` 存在认定交付完整。渲染失败不更新旧交付，普通切换异常尝试回滚；回滚失败或切换中断需要保留现场并人工核对，不承诺断电原子性或自动恢复。具体文件、字段及旧格式兼容规则见 [记录契约](records.md)。
 
 技术参考：[FFmpeg](https://ffmpeg.org/ffmpeg.html)、[ffprobe](https://ffmpeg.org/ffprobe.html)。

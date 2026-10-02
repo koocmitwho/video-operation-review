@@ -125,14 +125,17 @@ class EvidenceAudit:
         state = self.states[n]
         return [n - 1, n, min(n + 1, state['end_frame']), state['end_frame'], state['end_frame'] + 1]
 
-    def evidence(self, refs, owner, frames=(), stage='coverage'):
+    def evidence(self, refs, owner, frames=(), stage='coverage', *, step_id=None):
         okay = True
+        target = {'reference': owner}
+        if step_id is not None:
+            target['step_id'] = step_id
         for ident in refs:
             if ident not in self.assets:
-                self.finding('audit_evidence_missing', f'{owner} 引用了不存在的证据 {ident}。', frames, stage, reference=owner)
+                self.finding('audit_evidence_missing', f'{owner} 引用了不存在的证据 {ident}。', frames, stage, **target)
                 okay = False
             elif ident not in self.seen:
-                self.finding('audit_evidence_unreviewed', f'{owner} 的证据 {ident} 尚无有效查看登记。', frames, stage, reference=owner)
+                self.finding('audit_evidence_unreviewed', f'{owner} 的证据 {ident} 尚无有效查看登记。', frames, stage, **target)
                 okay = False
         return okay
 
@@ -280,7 +283,7 @@ class EvidenceAudit:
                     if not _nonempty(key) or not isinstance(fact, dict) or 'value' not in fact or not _strings(fact.get('evidence')) or not fact['evidence']:
                         self.finding('state_fact_invalid', f'步骤 {ident} 的 {phase}.{key} 需要 value 和非空 evidence。', frames, 'continuity', step_id=ident)
                         continue
-                    self.evidence(fact['evidence'], f'{ident}.{phase}.{key}', frames, 'continuity')
+                    self.evidence(fact['evidence'], f'{ident}.{phase}.{key}', frames, 'continuity', step_id=ident)
                     value = fact['value']
                     if value is None:
                         self.finding('state_value_unknown', f'步骤 {ident} 的 {key} 待确认，请补充前后状态证据。', frames, 'continuity', step_id=ident)
@@ -297,7 +300,8 @@ class EvidenceAudit:
                         final = step['final_parameters'][key]
                         final = final.get('value') if isinstance(final, dict) else final
                         if final is not None and _canonical(final) != _canonical(value):
-                            self.finding('final_parameter_mismatch', f'步骤 {ident} 的最终参数 {key} 与 after 状态不一致。', frames, 'continuity', step_id=ident)
+                            self.finding('final_parameter_mismatch', f'步骤 {ident} 的最终参数 {key} 与 after 状态不一致。',
+                                         frames, 'continuity', step_id=ident, parameter_key=key)
             for role in ['confirmation', 'result']:
                 item = transition[role]
                 if not isinstance(item, dict) or item.get('status') not in {'observed', 'not_applicable'}:
@@ -308,7 +312,7 @@ class EvidenceAudit:
                 elif item['status'] == 'observed' and not item['evidence']:
                     self.finding(f'{role}_gap', f'步骤 {ident} 的 {role} 标为 observed，但没有证据。', frames, 'continuity', step_id=ident)
                 else:
-                    self.evidence(item['evidence'], f'{ident}.{role}', frames, 'continuity')
+                    self.evidence(item['evidence'], f'{ident}.{role}', frames, 'continuity', step_id=ident)
 
     def omission_review(self, snapshot):
         row = self.conn.execute('SELECT payload FROM omission_reviews ORDER BY recorded_at DESC,id DESC LIMIT 1').fetchone()
@@ -350,12 +354,15 @@ class EvidenceAudit:
 
 def audit_omissions(conn, work, queue=False, base_validation=None, mode=None):
     mode = mode or get_meta(conn, 'review_mode', 'layered')
-    if mode == 'layered':
-        from vor_layer_audit import audit_layers
-        return audit_layers(conn, work, queue, base_validation)
-    if mode != 'strict':
+    if mode not in {'layered', 'strict'}:
         raise ValueError('Audit mode must be layered or strict.')
     base = validate(conn, work, _include_review=False) if base_validation is None else base_validation
+    if base.get('record_contract_errors'):
+        from vor_record_contract import record_contract_audit
+        return record_contract_audit(base, mode)
+    if mode == 'layered':
+        from vor_layer_audit import audit_layers
+        return audit_layers(conn, work, queue, base)
     audit = EvidenceAudit(conn)
     s = base['status']
     if not base['valid']:

@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+from vor_record_contract import (STEP_FIELDS, check_import_records, check_issue, check_step,
+                                 evidence_references, record_contract_audit, record_contract_errors)
 
 SCHEMA_VERSION = 3
 
@@ -94,6 +96,11 @@ def verify_source(conn, force_hash=False):
                   method='sha256_recomputed' if rehashed else 'cached_sha256_stat_match')
     if source['sha256'] != expected.get('sha256'):
         return dict(result, code='source_hash_mismatch', message='源视频 SHA-256 与扫描时记录不一致。')
+    from vor_input_policy import InputPolicyError, require_self_contained
+    try:
+        require_self_contained(source['path'])
+    except InputPolicyError as exc:
+        return dict(result, code='source_unsupported_media_input', message=str(exc))
     return dict(result, valid=True)
 
 
@@ -212,7 +219,7 @@ def ranges(values):
     return result
 
 
-def status(conn):
+def status(conn, _record_errors=None):
     total = get_meta(conn, 'video_total_frames')
     indexed = conn.execute('SELECT COUNT(*) FROM frames').fetchone()[0]
     computed = conn.execute('SELECT COUNT(*) FROM frames WHERE digest IS NOT NULL').fetchone()[0]
@@ -228,8 +235,15 @@ def status(conn):
     declared = get_meta(conn, 'declared_frames')
     count_mismatch = (declared != total) if index_clean and total is not None and declared is not None else None
     attempts = [dict(r) for r in conn.execute('SELECT * FROM attempts ORDER BY id')]
-    open_issues = [json.loads(r[0]) for r in conn.execute('SELECT payload FROM issues')
-                   if json.loads(r[0]).get('status') != 'resolved']
+    contract_errors = record_contract_errors(conn) if _record_errors is None else _record_errors
+    open_issues = []
+    for row in conn.execute('SELECT payload FROM issues'):
+        try:
+            issue = json.loads(row[0])
+        except (ValueError, TypeError):
+            continue  # The field diagnostic is retained in record_contract_errors.
+        if not check_issue(issue) and issue['status'] != 'resolved':
+            open_issues.append(issue)
     result = {
         'video_total_frames': total, 'container_declared_frames': declared,
         'frame_count_basis': 'decoded_presentation_frames',
@@ -262,13 +276,22 @@ def status(conn):
             '(SELECT 1 FROM views v JOIN assets a ON a.id=v.asset_id '
             'WHERE v.frame_no=c.frame_no AND a.kind="full" AND v.presentation="native") ORDER BY frame_no')),
         'unresolved_issues': open_issues, 'attempts': attempts,
+        'record_contract_errors': contract_errors, 'annotation_counts_available': not contract_errors,
         'timestamp_anomalies': get_meta(conn, 'timestamp_anomalies', {}),
         'near_duplicate_merging': False,
         'risk': '变化指标提供候选线索，关键操作通过原图、局部裁剪与前后状态核对。'
     }
     from vor_layers import coverage_counts
-    result.update(coverage_counts(conn))
-    result['near_duplicate_merging'] = bool(result['approximate_merge_intervals'])
+    if contract_errors:
+        result.update({key: None for key in (
+            'coarse_reviewed_frames_recorded', 'fine_reviewed_frames_recorded', 'fine_examined_frames_recorded',
+            'fine_examined_ranges', 'not_fine_examined_ranges', 'coarse_reviewed_ranges', 'fine_reviewed_ranges',
+            'not_coarse_reviewed_ranges', 'not_fine_reviewed_ranges', 'candidate_operation_units',
+            'true_operation_count', 'approximate_merge_intervals')})
+        result['near_duplicate_merging'] = None
+    else:
+        result.update(coverage_counts(conn))
+        result['near_duplicate_merging'] = bool(result['approximate_merge_intervals'])
     result['candidate_pixel_equivalence'] = 'exact_consecutive_RGB_only'
     result['review_mode'] = get_meta(conn, 'review_mode', 'layered')
     result['recorded_overview_unique_frames'] = conn.execute(
@@ -421,51 +444,6 @@ def record_view(conn, work, asset_id, actor, tool, trace, observation):
     return status(conn)
 
 
-STEP_FIELDS = {'id': str, 'phase': str, 'start_frame': int, 'end_frame': int, 'software': str,
-               'module': str, 'menu_path': list, 'selected_objects': list, 'final_parameters': dict,
-               'confirmation_action': str, 'visible_result': str, 'input_files': list,
-               'output_files': list, 'evidence': list, 'uncertainties': list, 'status': str}
-
-
-def evidence_references(value):
-    """Collect explicit evidence fields at every depth; reject malformed reference lists."""
-    refs = set()
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if key == 'evidence':
-                if not isinstance(item, list) or not all(isinstance(ref, str) for ref in item):
-                    raise ValueError('Every evidence field must be a list of asset IDs.')
-                refs.update(item)
-            else:
-                refs.update(evidence_references(item))
-    elif isinstance(value, list):
-        for item in value:
-            refs.update(evidence_references(item))
-    return refs
-
-
-def check_step(step):
-    errors = [f'{key} must be {typ.__name__}' for key, typ in STEP_FIELDS.items()
-              if key not in step or type(step[key]) is not typ]
-    if errors:
-        return errors
-    if not step['id'].strip() or step['start_frame'] < 0 or step['start_frame'] > step['end_frame']:
-        errors.append('Invalid id or frame interval')
-    if step['status'] not in {'confirmed', 'partial', 'unresolved'}:
-        errors.append('status must be confirmed, partial or unresolved')
-    if not all(isinstance(x, str) for x in step['evidence']):
-        errors.append('Evidence must contain asset IDs')
-    else:
-        try:
-            if evidence_references(step) - set(step['evidence']):
-                errors.append('Nested evidence must also be listed in the step top-level evidence field.')
-        except ValueError as exc:
-            errors.append(str(exc))
-    if step['status'] == 'confirmed' and step['uncertainties']:
-        errors.append('含待核对项的步骤请使用 partial 状态')
-    return errors
-
-
 def import_records(conn, path):
     from vor_audit import check_aux_records
     from vor_layers import check_layer_records, import_layer_records
@@ -475,16 +453,7 @@ def import_records(conn, path):
     for key in ['steps', 'issues', 'coverage', 'omission_reviews']:
         if key in data and not isinstance(data[key], list):
             raise ValueError(f'{key} must be an array.')
-    for step in data.get('steps', []):
-        errors = check_step(step)
-        if errors:
-            raise ValueError('; '.join(errors))
-    for issue in data.get('issues', []):
-        if not isinstance(issue, dict) or not all(k in issue for k in ['id', 'question', 'status', 'attempts']):
-            raise ValueError('Issues need id, question, status and attempts.')
-        if issue['status'] not in {'open', 'blocked', 'resolved'} or not isinstance(issue['attempts'], list):
-            raise ValueError('Invalid issue status or attempts.')
-        evidence_references(issue)
+    check_import_records(data)
     check_aux_records(conn, data)
     check_layer_records(conn, data)
     with conn:
@@ -505,7 +474,8 @@ def import_records(conn, path):
 
 
 def validate(conn, work, require_coverage=False, mode=None, force_source_hash=False, *, _include_review=True):
-    errors, warnings = [], []
+    contract_errors = record_contract_errors(conn)
+    errors, warnings = list(contract_errors), []
     def err(code, ref, message):
         errors.append({'code': code, 'reference': ref, 'message': message})
     source_verification = verify_source(conn, force_source_hash)
@@ -547,9 +517,12 @@ def validate(conn, work, require_coverage=False, mode=None, force_source_hash=Fa
                     m['asset_id']==view['asset_id'] and m['source_sha256']==view['asset_sha256'] for m in sheet.get('members',[])):
                 err('bad_sheet_view',view['id'],'Overview sheet or original member hash is missing/changed.')
     for row in conn.execute('SELECT * FROM steps'):
-        step = json.loads(row['payload'])
-        for message in check_step(step):
-            err('invalid_step', row['id'], message)
+        try:
+            step = json.loads(row['payload'])
+        except (ValueError, TypeError):
+            continue
+        if check_step(step):
+            continue  # Already diagnosed; do not dereference malformed legacy data.
         for n in [step.get('start_frame'), step.get('end_frame')]:
             if conn.execute('SELECT 1 FROM frames WHERE frame_no=?', (n,)).fetchone() is None:
                 err('unknown_frame', row['id'], str(n))
@@ -561,7 +534,12 @@ def validate(conn, work, require_coverage=False, mode=None, force_source_hash=Fa
             elif ident not in seen_assets:
                 err('unreviewed_evidence', row['id'], ident)
     for row in conn.execute('SELECT * FROM issues'):
-        issue = json.loads(row['payload'])
+        try:
+            issue = json.loads(row['payload'])
+        except (ValueError, TypeError):
+            continue
+        if check_issue(issue):
+            continue
         try:
             references = evidence_references(issue)
         except ValueError as exc:
@@ -572,7 +550,7 @@ def validate(conn, work, require_coverage=False, mode=None, force_source_hash=Fa
                 err('unknown_evidence', row['id'], ident)
             elif ident not in seen_assets:
                 err('unreviewed_evidence', row['id'], ident)
-    s = status(conn)
+    s = status(conn, _record_errors=contract_errors)
     if not s['full_compute_complete']:
         warnings.append('全帧计算待完成；请查看 attempts 和后续范围。')
     if s['container_frame_count_mismatch']:
@@ -582,10 +560,12 @@ def validate(conn, work, require_coverage=False, mode=None, force_source_hash=Fa
         warnings.append(f"待查看候选源帧：{s['candidates_pending']}。")
     result = {'valid': not errors, 'errors': errors, 'warnings': warnings,
               'assurance': 'record_consistency_only', 'status': s,
+              'record_contract_errors': contract_errors,
               'source_verification': source_verification}
     if _include_review or require_coverage:
         from vor_audit import audit_omissions
-        audit = audit_omissions(conn, work, base_validation=result, mode=mode)
+        audit = (record_contract_audit(result, mode or get_meta(conn, 'review_mode', 'layered'))
+                 if contract_errors else audit_omissions(conn, work, base_validation=result, mode=mode))
         result['review_complete'] = bool(result['valid'] and s['full_compute_complete']
                                          and s['selected_candidates_review_complete_recorded']
                                          and audit['review_gate_passed_recorded'])
@@ -600,8 +580,16 @@ def validate(conn, work, require_coverage=False, mode=None, force_source_hash=Fa
 
 def export_records(conn, work, force_source_hash=False):
     from vor_audit import audit_omissions
+    from vor_export import publish_generation, require_no_pending_export
+    from uuid import uuid4
     work = Path(work).resolve()
+    require_no_pending_export(work)
+    contract_errors = record_contract_errors(conn)
+    if contract_errors:
+        raise ValueError('Cannot export invalid records: ' + '; '.join(e['message'] for e in contract_errors))
+    generation = uuid4().hex
     report = {'schema_version': SCHEMA_VERSION,
+              'export_generation': generation,
               'source': get_meta(conn, 'source'), 'media': get_meta(conn, 'media'),
               'scan_config': get_meta(conn, 'scan_config'), 'selection_config': get_meta(conn, 'selection_config'),
               'status': status(conn), 'validation': validate(conn, work, force_source_hash=force_source_hash,
@@ -617,16 +605,6 @@ def export_records(conn, work, force_source_hash=False):
             for key in ['payload', 'reasons', 'represented_requests', 'crop']:
                 if key in row and row[key] is not None:
                     row[key] = json.loads(row[key])
-    atomic_text(work / 'review.json', json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False))
-    atomic_text(work / 'omission-audit.json', json.dumps(report['coverage_audit'], ensure_ascii=False, indent=2, allow_nan=False))
-    temp = work / 'frames.jsonl.tmp'
-    with temp.open('w', encoding='utf-8', newline='\n') as f:
-        for row in conn.execute('SELECT * FROM frames ORDER BY frame_no'):
-            entry = dict(row)
-            if entry['tiles']:
-                entry['tiles'] = json.loads(entry['tiles'])
-            f.write(dump(entry) + '\n')
-    temp.replace(work / 'frames.jsonl')
     from functools import lru_cache
     from vor_report import render_report
     @lru_cache(maxsize=4096)
@@ -634,13 +612,27 @@ def export_records(conn, work, force_source_hash=False):
         row = conn.execute('SELECT frame_no,pts_time,best_effort_time,time_s,time_source '
                            'FROM frames WHERE frame_no=?', (frame_no,)).fetchone()
         return dict(row) if row else None
-    atomic_text(work / 'report.md', render_report(report, work, frame_details))
+    def populate(stage):
+        # A renderer exception occurs before any previously delivered file changes.
+        markdown = render_report(report, work, frame_details)
+        markdown += f'\n<!-- export_generation: {generation}; verify export-manifest.json and absence of export.pending.json -->\n'
+        (stage / 'report.md').write_text(markdown, encoding='utf-8')
+        (stage / 'review.json').write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False), encoding='utf-8')
+        audit_file = dict(report['coverage_audit'], export_generation=generation)
+        (stage / 'omission-audit.json').write_text(json.dumps(audit_file, ensure_ascii=False, indent=2, allow_nan=False), encoding='utf-8')
+        with (stage / 'frames.jsonl').open('w', encoding='utf-8', newline='\n') as stream:
+            for row in conn.execute('SELECT * FROM frames ORDER BY frame_no'):
+                entry = dict(row)
+                if entry['tiles']:
+                    entry['tiles'] = json.loads(entry['tiles'])
+                stream.write(dump(entry) + '\n')
+    publication = publish_generation(work, generation, populate)
     audit = report['coverage_audit']
     return {'review_json': str(work / 'review.json'), 'frames_jsonl': str(work / 'frames.jsonl'),
             'report': str(work / 'report.md'), 'omission_audit': str(work / 'omission-audit.json'),
             'validation_passed': report['validation']['valid'],
             'review_complete': report['validation']['review_complete'],
-            'omission_gate_passed_recorded': audit['review_gate_passed_recorded']}
+            'omission_gate_passed_recorded': audit['review_gate_passed_recorded'], **publication}
 
 
 def atomic_text(path, value):

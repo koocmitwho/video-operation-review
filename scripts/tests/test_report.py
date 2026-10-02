@@ -1,6 +1,7 @@
 """User-facing export contracts; synthetic records are not a visual or reproduction test."""
 import json
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 import unittest
@@ -17,7 +18,9 @@ class ReadableReportContract(unittest.TestCase):
         self.conn = store.connect(self.work, create=True)
         self.addCleanup(self.conn.close)
         self.video = self.work / 'source clip (1).mkv'
-        self.video.write_bytes(b'synthetic source identity; not decoded media')
+        # Real, project-owned media keeps this record fixture compatible with the
+        # local-container policy; assets below remain explicit bookkeeping doubles.
+        shutil.copyfile(Path(__file__).resolve().parents[2] / 'examples' / 'tutorial' / 'tutorial.mkv', self.video)
         source, _, _ = store.source_file_identity(self.video)
         store.set_meta(self.conn, 'source', source)
         self.conn.executemany(
@@ -51,8 +54,10 @@ class ReadableReportContract(unittest.TestCase):
                     output_files=[], evidence=refs, uncertainties=[] if status == 'confirmed' else ['未看清应用'],
                     status=status, author='test-author',
                     role_evidence={'before': [refs[0]], 'during': [refs[-1]], 'after': [refs[-1]]},
-                    transition={'confirmation': {'status': 'observed', 'evidence': [refs[-1]]},
-                                'result': {'status': 'observed', 'evidence': [refs[-1]]}})
+                    transition={'before': {f'{ident}.visible': {'value': True, 'evidence': [refs[0]]}},
+                                'after': {f'{ident}.visible': {'value': True, 'evidence': [refs[-1]]}},
+                                'confirmation': {'status': 'observed', 'evidence': [refs[-1]], 'note': '应用后的参数栏可见'},
+                                'result': {'status': 'observed', 'evidence': [refs[-1]], 'note': '参数栏显示结果'}})
 
     def add_records(self, **records):
         path = self.work / 'annotations.json'
@@ -235,6 +240,161 @@ class ReadableReportContract(unittest.TestCase):
         self.assertEqual(saved['steps'][0]['payload'], step)
         self.assertTrue(result['validation_passed'])
         self.assertFalse(result['review_complete'])
+
+    def test_audited_parameter_conflict_downgrades_only_that_parameter_and_keeps_payload(self):
+        bad, good = self.step('S1', 0, 1, value='20'), self.step('S2', 2, 3, value='5')
+        bad['final_parameters']['温度'] = {'value': 300, 'unit': 'K', 'evidence': ['f000000001']}
+        bad['transition']['after']['步长'] = {'value': '1', 'evidence': ['f000000001']}
+        bad['transition']['after']['温度'] = {'value': 300, 'evidence': ['f000000001']}
+        self.add_records(steps=[bad, good])
+        result, md = self.export()
+        saved = json.loads((self.work / 'review.json').read_text(encoding='utf-8'))
+        finding = next(f for f in saved['coverage_audit']['findings'] if f['code'] == 'final_parameter_mismatch')
+        with self.subTest('audit exposes the conflicting parameter'):
+            self.assertEqual(finding.get('parameter_key'), '步长')
+        summary = md.split('## 参数与生效范围')[1].split('## 操作步骤')[0]
+        affected = next(line for line in summary.splitlines() if '| S1 /' in line and '| 步长 |' in line)
+        reliable = next(line for line in summary.splitlines() if '| S1 /' in line and '| 温度 |' in line)
+        with self.subTest('conflicting value is retained but not declared effective'):
+            self.assertIn('20 s', affected)
+            self.assertIn('生效未核实', affected)
+            self.assertNotIn('S1 完成后', affected)
+        with self.subTest('unaffected parameters and steps remain useful'):
+            self.assertIn('S1 完成后', reliable)
+            self.assertIn('S2 完成后', summary)
+        front = md.split('## 参数与生效范围')[0]
+        body = md.split('### S1')[1].split('### S2')[0]
+        with self.subTest('conflict is visible beside the affected step'):
+            self.assertIn('已确认步骤：S2', front)
+            self.assertIn('待核实步骤：S1', front)
+            self.assertIn('待核实', body.splitlines()[0])
+            self.assertIn('final_parameter_mismatch', body)
+            self.assertIn('after', body)
+            self.assertIn('frame%201%20%28full%29.png', body)
+        self.assertEqual([row['payload'] for row in saved['steps']], [bad, good])
+        self.assertTrue(result['validation_passed'])
+
+    def test_confirmation_and_result_evidence_gaps_downgrade_only_the_affected_step(self):
+        for role in ['confirmation', 'result']:
+            with self.subTest(role=role):
+                bad, good = self.step('S1', 0, 1), self.step('S2', 2, 3)
+                bad['transition'][role]['evidence'] = []
+                self.add_records(steps=[bad, good])
+                _, md = self.export()
+                summary = md.split('## 参数与生效范围')[1].split('## 操作步骤')[0]
+                self.assertNotIn('S1 完成后', summary)
+                self.assertIn('S2 完成后', summary)
+                body = md.split('### S1')[1].split('### S2')[0]
+                self.assertIn(role + '_gap', body)
+                self.assertIn('待核实', body.splitlines()[0])
+
+    def test_discontinuous_state_downgrades_both_related_steps_only(self):
+        a, b, independent = self.step('S1', 0, 0), self.step('S2', 1, 1), self.step('S3', 2, 3)
+        a['transition']['after']['shared.rate'] = {'value': 1, 'evidence': ['f000000000']}
+        b['transition']['before']['shared.rate'] = {'value': 9, 'evidence': ['f000000001']}
+        self.add_records(steps=[a, b, independent])
+        _, md = self.export()
+        front = md.split('## 参数与生效范围')[0]
+        summary = md.split('## 参数与生效范围')[1].split('## 操作步骤')[0]
+        self.assertIn('已确认步骤：S3', front)
+        self.assertIn('待核实步骤：S1、S2', front)
+        self.assertNotIn('S1 完成后', summary)
+        self.assertNotIn('S2 完成后', summary)
+        self.assertIn('S3 完成后', summary)
+        for section in [md.split('### S1')[1].split('### S2')[0], md.split('### S2')[1].split('### S3')[0]]:
+            self.assertIn('state_discontinuity', section)
+
+    def test_legacy_finding_without_parameter_key_downgrades_whole_step(self):
+        from vor_report import render_report
+        a, b = self.step('S1', 0, 1), self.step('S2', 2, 3)
+        a['final_parameters']['温度'] = {'value': 300, 'unit': 'K'}
+        self.add_records(steps=[a, b])
+        self.export()
+        report = json.loads((self.work / 'review.json').read_text(encoding='utf-8'))
+        report['coverage_audit']['findings'] = [dict(code='final_parameter_mismatch', step_id='S1',
+            message='Legacy conflict without a parameter key', suggested_frames=[1])]
+        md = render_report(report, self.work, lambda n: dict(self.conn.execute('SELECT * FROM frames WHERE frame_no=?', (n,)).fetchone()))
+        summary = md.split('## 参数与生效范围')[1].split('## 操作步骤')[0]
+        self.assertNotIn('S1 完成后', summary)
+        self.assertIn('S2 完成后', summary)
+        self.assertIn('Legacy conflict without a parameter key', md.split('### S1')[1].split('### S2')[0])
+
+    def test_evidence_reference_targets_exact_step_id_and_global_findings_do_not_downgrade_all(self):
+        from vor_report import render_report
+        self.add_records(steps=[self.step('S1', 0, 1), self.step('S10', 2, 3)])
+        self.export()
+        report = json.loads((self.work / 'review.json').read_text(encoding='utf-8'))
+        report['coverage_audit']['findings'] = [
+            dict(code='audit_evidence_unreviewed', reference='S1.after.rate', message='Missing author observation', suggested_frames=[1]),
+            dict(code='omission_review_missing', message='Global review is missing', suggested_frames=[])]
+        md = render_report(report, self.work, lambda n: dict(self.conn.execute('SELECT * FROM frames WHERE frame_no=?', (n,)).fetchone()))
+        front = md.split('## 参数与生效范围')[0]
+        summary = md.split('## 参数与生效范围')[1].split('## 操作步骤')[0]
+        self.assertIn('已确认步骤：S10', front)
+        self.assertIn('待核实步骤：S1', front)
+        self.assertNotIn('S1 完成后', summary)
+        self.assertIn('S10 完成后', summary)
+
+    def test_reliable_cancelled_value_remains_effective_without_promoting_the_input(self):
+        cancelled = self.step('S1', 0, 1, value='1')
+        cancelled['input_action'] = '输入 20，随后取消'
+        cancelled['confirmation_action'] = '取消后返回主界面'
+        cancelled['visible_result'] = 'Current rate 保持为 1'
+        cancelled['transition']['before'] = {'步长': {'value': '1', 'evidence': ['f000000000']}}
+        cancelled['transition']['after'] = {'步长': {'value': '1', 'evidence': ['f000000001']}}
+        cancelled['transition']['confirmation']['note'] = 'Cancelled 状态可见'
+        self.add_records(steps=[cancelled])
+        _, md = self.export()
+        summary = md.split('## 参数与生效范围')[1].split('## 操作步骤')[0]
+        self.assertIn('1 s', summary)
+        self.assertIn('S1 完成后', summary)
+        self.assertNotIn('20 s', summary)
+        self.assertIn('已确认步骤：S1', md)
+
+    def test_typed_step_evidence_finding_does_not_misroute_a_dotted_step_id(self):
+        from vor_audit import EvidenceAudit
+        from vor_report import render_report
+        a, b = self.step('S1', 0, 1), self.step('S1.after', 2, 3)
+        a['transition']['after']['rate'] = {'value': 1, 'evidence': ['f000000001']}
+        self.add_records(steps=[a, b])
+        self.export()
+        report = json.loads((self.work / 'review.json').read_text(encoding='utf-8'))
+        # Exercise the real producer of the ambiguous historical reference string.
+        self.conn.execute("DELETE FROM views WHERE asset_id='f000000001'")
+        self.conn.commit()
+        audit = EvidenceAudit(self.conn)
+        audit.step_transitions()
+        finding = next(f for f in audit.findings if f.get('reference') == 'S1.after.rate')
+        with self.subTest('producer retains the actual owner separately from its readable reference'):
+            self.assertEqual(finding.get('step_id'), 'S1')
+        # Rendering a finding must use its typed owner, even when another legal ID
+        # is a longer textual prefix. Other validation errors are tested separately.
+        report['coverage_audit']['findings'] = [finding]
+        md = render_report(report, self.work, lambda n: dict(self.conn.execute('SELECT * FROM frames WHERE frame_no=?', (n,)).fetchone()))
+        front = md.split('## 参数与生效范围')[0]
+        summary = md.split('## 参数与生效范围')[1].split('## 操作步骤')[0]
+        with self.subTest('only the actual owner is downgraded'):
+            self.assertIn('已确认步骤：S1.after', front)
+            self.assertIn('待核实步骤：S1。', front)
+            self.assertNotIn('S1 完成后', summary)
+            self.assertIn('S1.after 完成后', summary)
+
+    def test_legacy_ambiguous_evidence_reference_marks_candidates_without_guessing_the_owner(self):
+        from vor_report import render_report
+        self.add_records(steps=[self.step('S1', 0, 0), self.step('S1.after', 1, 1), self.step('S9', 2, 3)])
+        self.export()
+        report = json.loads((self.work / 'review.json').read_text(encoding='utf-8'))
+        report['coverage_audit']['findings'] = [dict(code='audit_evidence_unreviewed',
+            reference='S1.after.rate', message='Legacy evidence gap with ambiguous owner', suggested_frames=[1])]
+        md = render_report(report, self.work, lambda n: dict(self.conn.execute('SELECT * FROM frames WHERE frame_no=?', (n,)).fetchone()))
+        front = md.split('## 参数与生效范围')[0]
+        summary = md.split('## 参数与生效范围')[1].split('## 操作步骤')[0]
+        self.assertIn('已确认步骤：S9', front)
+        self.assertIn('待核实步骤：S1、S1.after', front)
+        self.assertNotIn('S1 完成后', summary)
+        self.assertNotIn('S1.after 完成后', summary)
+        self.assertIn('S9 完成后', summary)
+        self.assertIn('引用存在歧义', md.split('### S1')[1].split('### S1.after')[0])
 
 
 if __name__ == '__main__':

@@ -2,7 +2,7 @@
 
 简体中文 | [English](README.en.md)
 
-固定版本预发布候选：**0.1.0-rc.2**。版本号见 [VERSION](VERSION)，本次范围见 [RC.2 说明](references/release-rc2.md)，首个候选的兼容变化见 [RC.1 说明](references/release-candidate.md)。
+固定版本预发布候选：**0.1.0-rc.3**。版本号见 [VERSION](VERSION)，本次范围与兼容边界见 [RC.3 说明](references/release-rc3.md)；历史候选见 [RC.2 说明](references/release-rc2.md) 和 [RC.1 说明](references/release-candidate.md)。
 
 **面向软件操作录屏的分层审阅技能：还原操作步骤，保留画面。**
 
@@ -32,6 +32,8 @@
 
 已在 Windows 上验证 Python 3.10.11 与 Python 3.12.10，使用 FFmpeg 8.1.2。
 当前覆盖单视频流与常见 8-bit 编码；高位深、动态分辨率和其他平台组合未验证。
+
+视频输入仅接受本地自包含的 Matroska/WebM、AVI、MOV/MP4 文件，按实际内容和内部引用检查，不以扩展名放行。播放列表、拼接清单、图像序列、引用外部媒体的 MOV/MP4 及其他格式会被拒绝；已有审阅库的源文件也要满足此边界。独立字幕继续支持 UTF-8 SRT/VTT。具体限制见 [处理方法](references/method.md)。
 
 如需安装 Python 依赖，建议在自己的虚拟环境中执行：
 
@@ -145,6 +147,8 @@ python scripts/review_video.py export --work ./work/tutorial
 
 `valid` 表示源文件、证据哈希与记录完整性；`review_complete` 表示候选查看和当前复核门禁完成。默认 validate 按 valid 返回 0/1；`--require-coverage` 将完整审阅加入退出条件，但不改变 valid 的含义：有效记录尚未完成时返回 `valid=true`、`review_complete=false` 和退出码 1，原因见 `coverage_errors`。`--rehash-source` 显式重算源文件哈希，结果中的 rehashed 记录本次行为。export 支持分阶段交付并保留当前状态。
 
+导入步骤和疑点时，ID 必须为非空字符串，在同一批的各自列表内唯一；分批使用相同 ID 更新仍受支持。已知字段的类型错误会在写入前拒绝，错误指出字段位置。旧库中的非法步骤或疑点会被诊断并阻止导出，保留原记录供修正。报告将可定位的审计冲突或证据缺口标到对应步骤和参数，保留原值及依据；它仍不能自动判断自由文字是否符合画面。详见 [记录契约](references/records.md)。
+
 ## 输出内容
 
 | 文件 | 内容 |
@@ -155,7 +159,10 @@ python scripts/review_video.py export --work ./work/tutorial
 | `frames.jsonl` | 逐帧索引和变化指标 |
 | `omission-audit.json` | 覆盖、衔接、抽查和复核检查结果 |
 | `report.md` | 便于阅读的操作说明、截图与未解决项 |
+| `export-manifest.json` | 本次导出的代次标识及上述四份交付文件的大小、SHA-256 |
 | `evidence/` | 按需导出的原图、裁剪和概览拼图 |
+
+读取新导出时，先确认没有 `export.pending.json`，再核对 `export-manifest.json` 的 `state=complete`、代次和四个文件摘要。若存在 pending，保留它及指向的 `.export-*` 暂存目录和 `previous` 备份，核对或恢复上一代后再处理；不要直接删除标记以强行继续，程序也不会自动恢复。文件组切换不具备跨文件的断电原子性。旧导出没有清单时按旧格式处理，无需删除；完整检查规则见 [记录契约](references/records.md)。
 
 输入视频、审阅数据库和证据可能包含使用者自己的内容。它们应保存在各自工作目录。
 每个 `--work` 由一个记录者串行写入；多位审阅者各自产出记录后按 ID 导入。
@@ -174,6 +181,8 @@ python scripts/review_video.py export --work ./work/tutorial
 审计核对记录一致性与区间覆盖；查看登记是自报值，不构成独立核实。
 
 ## 验证情况
+
+2026-10-02 的审阅完整性修复验收在隔离 Git 副本中完成：Windows / Python 3.12.10 与 3.10.11 各 181 项测试通过，无失败、无跳过，分别耗时 163.798 秒与 214.210 秒。此处记录版本号更新前的修复阶段结果，不代替 RC.3 发布候选重测或对应提交的远端 CI。八份旧账本的隔离副本仍均为 `valid=true`、`review_complete=false`；六个原疑点保留。公开合成短例实际查看 5 张图片后完成阶段导出，四文件清单哈希和代次一致；这不是独立人工语义准确率。脱敏范围与限制见 [修复验收摘要](validation/fixes-20261002.json)，发布兼容变化见 [RC.3 说明](references/release-rc3.md)。
 
 2026-10-01 的[本地修复复核](references/rc1-repair.md)确认了验收整理脚本重复执行丢失观察值、重复追加补查以及记录文字矛盾；生产 CLI 实现未改。一个 38 秒真实片段的 AI 草稿经用户确认，作为该片段的核对基准，不能代表盲标注或其他视频的准确率。6 个原疑点和 8 份未完成审阅仍保留。`0.1.0-rc.2` 收录脱敏摘要、整理补丁及可选回归，详见 [RC.2 说明](references/release-rc2.md)。
 
