@@ -24,7 +24,7 @@ class RecordFixture:
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix='vor record contract ')
         self.addCleanup(temporary.cleanup)
-        self.work = Path(temporary.name)
+        self.work = Path(temporary.name).resolve()
         self.conn = store.connect(self.work, create=True)
         self.addCleanup(self.conn.close)
         source = self.work / 'source.mkv'

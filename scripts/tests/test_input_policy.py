@@ -18,7 +18,7 @@ class InputPolicyContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix='vor input policy ')
-        cls.root = Path(cls.temp.name)
+        cls.root = Path(cls.temp.name).resolve()
         cls.cfr, cls.vfr = make_fixtures(cls.root / 'input')
         cls.avi = cls.root / 'input' / 'ordinary.avi'
         cls.mp4 = cls.root / 'input' / 'ordinary.mp4'
