@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | English
 
-Fixed prerelease candidate: **0.1.0-rc.3**. See [VERSION](VERSION) and the [RC.3 notes](references/release-rc3.md) for this candidate's scope and compatibility boundaries; earlier candidates are documented in the [RC.2 notes](references/release-rc2.md) and [RC.1 notes](references/release-candidate.md).
+Fixed prerelease candidate: **0.1.0-rc.4**. See [VERSION](VERSION) and the [RC.4 notes](references/release-rc4.md) for the validation-material and trial-pack scope; earlier candidates are documented in the [RC.3 notes](references/release-rc3.md), [RC.2 notes](references/release-rc2.md), and [RC.1 notes](references/release-candidate.md).
 
 **A layered review skill for software screen recordings: reconstruct operations and preserve video frames.**
 
@@ -11,6 +11,8 @@ Designed for step-by-step software tutorials covering modeling, programming, dat
 For example, if a video shows someone entering `0.20`, cancelling, then entering `0.02` and applying it, the review should distinguish the temporary input from the final value. Questions remain open when a button is unclear or an execution result is not shown.
 
 > The scripts handle video indexing, evidence management, and record checks. The AI assistant interprets the operations by actually viewing the images.
+
+RC.4 adds [validation summaries for three public recordings](examples/open-cases/README.md) and a [portable independent-trial pack](examples/open-cases/trial/README.md). One fresh-context agent replay passed the content check; human reliability and overall time savings remain unestablished. Runtime logic, schema 3, and review gates are unchanged.
 
 ## Features
 

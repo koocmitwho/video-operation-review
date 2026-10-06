@@ -2,7 +2,7 @@
 
 简体中文 | [English](README.en.md)
 
-固定版本预发布候选：**0.1.0-rc.3**。版本号见 [VERSION](VERSION)，本次范围与兼容边界见 [RC.3 说明](references/release-rc3.md)；历史候选见 [RC.2 说明](references/release-rc2.md) 和 [RC.1 说明](references/release-candidate.md)。
+固定版本预发布候选：**0.1.0-rc.4**。版本号见 [VERSION](VERSION)，本次验证材料与试用包范围见 [RC.4 说明](references/release-rc4.md)；历史候选见 [RC.3 说明](references/release-rc3.md)、[RC.2 说明](references/release-rc2.md) 和 [RC.1 说明](references/release-candidate.md)。
 
 **面向软件操作录屏的分层审阅技能：还原操作步骤，保留画面。**
 
@@ -11,6 +11,8 @@
 例如，视频里先输入 `0.20`，取消后重新输入 `0.02` 并应用，审阅结果应区分临时输入与最终值；看不清按钮或没有展示执行结果时，会保留疑问。
 
 > 脚本负责视频索引、证据管理和记录检查；操作语义由 AI 助手实际查看图片后判断。
+
+RC.4 增加[三个公开录屏案例的验证摘要](examples/open-cases/README.md)和[可移植的独立试用材料](examples/open-cases/trial/README.md)。已有一次新上下文代理照做通过内容核验，未建立真人可靠性或总体省时；运行逻辑、schema 3 与审阅门禁未改。
 
 ## 主要作用
 

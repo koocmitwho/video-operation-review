@@ -1,0 +1,16 @@
+{
+  "public_summary_sha256": "786ba933680a980225f73ed4e47944faa4e96d101b4e34527fa17f62876b087c",
+  "original_trial_json_sha256": "b7ecd78b84ee508823f45c7e296b4bdf1b6423a173454002ef41e8ed22927ce4",
+  "relationship": "redacted and selected-field transcription, not a byte-identical copy",
+  "removed_or_generalized": [
+    "local absolute paths",
+    "browser tab identifiers",
+    "session identifiers",
+    "full user agent",
+    "host-specific tool-call references",
+    "private conversation context"
+  ],
+  "screenshot_byte_identical_to_original": true,
+  "screenshot_sha256": "0502455c929273452308183b2e57024b29e53a8695ef648add77970f981a5a41",
+  "original_records_retained_locally": true
+}

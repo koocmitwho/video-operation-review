@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-06",
+  "tested_product_version": "0.1.0-rc.3",
+  "packaged_in": "0.1.0-rc.4",
+  "scope": "Three external recordings and one subsequent fresh-context agent replay; no runtime logic changes",
+  "cases": [
+    {
+      "case_id": "case-vscode-01",
+      "valid": true,
+      "review_complete": false,
+      "validation_exit_code": 1,
+      "computed_frames": 44,
+      "recorded_visual_unique_frames": 44,
+      "candidate_frames": 44,
+      "candidates_pending": 0,
+      "unresolved_issue_ids": [
+        "Q01"
+      ]
+    },
+    {
+      "case_id": "case-vscode-02",
+      "valid": true,
+      "review_complete": true,
+      "validation_exit_code": 0,
+      "computed_frames": 38,
+      "recorded_visual_unique_frames": 38,
+      "candidate_frames": 33,
+      "candidates_pending": 0,
+      "unresolved_issue_ids": []
+    },
+    {
+      "case_id": "case-inkscape-01",
+      "valid": true,
+      "review_complete": false,
+      "validation_exit_code": 1,
+      "computed_frames": 1903,
+      "recorded_visual_unique_frames": 590,
+      "candidate_frames": 585,
+      "candidates_pending": 507,
+      "unresolved_issue_ids": [
+        "Q01",
+        "Q02"
+      ],
+      "recorded_full_image_unique_frames": 83,
+      "recorded_overview_unique_frames": 517,
+      "candidate_frames_with_native_view": 78,
+      "overview_or_native_coverage_of_candidates": 585,
+      "audio_present": true,
+      "audio_transcribed": false,
+      "source_gaps": [
+        "A pre-existing Tamil window does not establish restart application of the new setting.",
+        "Highlighting Save recording does not establish successful saving."
+      ]
+    }
+  ],
+  "human_acceptance": false,
+  "independent_human_gold": false,
+  "time_savings_established": false,
+  "semantic_accuracy": null,
+  "independent_agent_trial": "trial-observed/summary.json",
+  "raw_media_databases_and_tool_logs_not_distributed": true,
+  "two_vscode_clips_share_one_documentation_collection": true
+}
