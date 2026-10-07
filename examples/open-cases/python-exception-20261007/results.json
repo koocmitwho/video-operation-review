@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-07",
+  "case_id": "case-python-exception-01",
+  "product": "local unpublished step-correction candidate; version file retains RC.4",
+  "author_bundle": "frozen candidate-v1",
+  "independent_review_bundle": "frozen candidate-v5",
+  "retire_steps_used": false,
+  "content_snapshot_equal_between_bundles": true,
+  "full_computed_frames": 4606,
+  "current_candidates": 68,
+  "author_native_image_inputs": 82,
+  "independent_native_image_inputs": 82,
+  "unique_reviewed_source_frames": 82,
+  "overview_inputs": 0,
+  "intervals": 5,
+  "steps": 4,
+  "risk_random_samples": 15,
+  "first_author_valid": true,
+  "first_author_review_complete": false,
+  "after_independent_valid": true,
+  "after_independent_review_complete": true,
+  "first_author_files_frozen": 227,
+  "independent_files_frozen": 315,
+  "replay": {
+    "fresh_context": true,
+    "original_video_seen": false,
+    "expected_unsealed_after_author_and_replay_freeze": true,
+    "environment": "Windows Python3.12.10 standalone script",
+    "program_runs": 2,
+    "input_pairs": [
+      [
+        "10",
+        "a"
+      ],
+      [
+        "10",
+        "0"
+      ]
+    ],
+    "both_exit_codes": 0,
+    "both_stderr_empty": true,
+    "both_outputs_match_sealed_source_screening_reference": true,
+    "initial_and_final_code_ast_match": true,
+    "native_spyder_ui_verified": false,
+    "preparation_seconds": 127.275349,
+    "task_seconds": 41.617279,
+    "evidence_packaging_seconds": 122.427465,
+    "initial_instruction_reading_seconds": null,
+    "timing_is_not_full_video_review": true
+  },
+  "reference": "Source-screening agent transcription and local code cross-check; no author-supplied answer key or independent human gold.",
+  "boundaries": [
+    "Complete editing/running chain from a fully visible existing script; installation and file creation are not shown.",
+    "Narration was not transcribed.",
+    "Explicit save action and exact copying/pasting keys remain unverified.",
+    "Earlier console history is not counted as a new run.",
+    "No normal-input source execution, human reliability, semantic-zero-omissions, generalization, or time-saving claim."
+  ],
+  "incidental_history_exposure": "Independent reviewer briefly saw unrelated public product validation/release summaries; did not read target reference, screening assets, or replay.",
+  "raw_video_ledgers_tool_logs_distributed": false,
+  "first_frozen_results_preserved": true,
+  "packaged_in": "0.1.0-rc.5",
+  "status_field_scope": "All experimental status and bundle fields describe the preserved pre-publication trial; packaged_in identifies the later distribution."
+}

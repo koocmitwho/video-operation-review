@@ -150,6 +150,7 @@ def connect(work, create=False):
       tool TEXT NOT NULL, trace_ref TEXT NOT NULL, observation TEXT NOT NULL,
       asset_sha256 TEXT NOT NULL, created TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS steps(id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS step_retirements(id TEXT PRIMARY KEY, payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS issues(id TEXT PRIMARY KEY, payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS coverage(frame_no INTEGER PRIMARY KEY REFERENCES frames(frame_no), payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS omission_reviews(id TEXT PRIMARY KEY, payload TEXT NOT NULL, recorded_at TEXT NOT NULL);
@@ -456,6 +457,7 @@ def import_records(conn, path):
     check_import_records(data)
     check_aux_records(conn, data)
     check_layer_records(conn, data)
+    retirements = prepare_step_retirements(conn, data)
     with conn:
         for table in ['steps', 'issues']:
             for entry in data.get(table, []):
@@ -468,9 +470,114 @@ def import_records(conn, path):
             conn.execute('INSERT INTO omission_reviews VALUES (?,?,?) ON CONFLICT(id) '
                          'DO UPDATE SET payload=excluded.payload,recorded_at=excluded.recorded_at',
                          (entry['id'], dump(entry), now()))
+        for entry in retirements:
+            conn.execute('INSERT INTO step_retirements VALUES (?,?)', (entry['id'], dump(entry)))
+            conn.execute('DELETE FROM steps WHERE id=?', (entry['id'],))
+            log_history(conn, 'retired_step', entry)
         import_layer_records(conn, data)
         log_history(conn, 'import_records', data)
     return status(conn)
+
+
+def prepare_step_retirements(conn, data):
+    """Plan one bounded correction; never infer new links or silently close unknowns."""
+    retired = {r[0] for r in conn.execute('SELECT id FROM step_retirements')}
+    requests = data.get('retire_steps', [])
+    ids = {entry['id'] for entry in requests}
+    if retired & ({s['id'] for s in data.get('steps', [])} | ids):
+        raise ValueError('A retired step ID cannot be reused or retired again; use a new ID.')
+    def explicit_links(entry):
+        # Check both spellings, even when one takes precedence in issue resolution.
+        return set(entry.get('step_ids', [])) | ({entry['step_id']} if entry.get('step_id') else set())
+    for table in ('intervals', 'coverage', 'issues'):
+        for entry in data.get(table, []):
+            if explicit_links(entry) & retired:
+                raise ValueError(f'{table}: reference to a retired step requires correction.')
+    if not requests:
+        return []
+    before = {}
+    after = {}
+    for table in ('steps', 'intervals', 'coverage', 'issues'):
+        key = 'frame_no' if table == 'coverage' else 'id'
+        before[table] = {r[key]: json.loads(r['payload']) for r in conn.execute(f'SELECT * FROM {table}')}
+        after[table] = dict(before[table])
+        after[table].update({e[key]: e for e in data.get(table, [])})
+    for ident in ids:
+        if ident not in before['steps']:
+            raise ValueError(f'retire_steps: unknown active step {ident!r}.')
+        after['steps'].pop(ident)
+    for ident in data.get('retire_intervals', []):
+        after['intervals'].pop(ident, None)
+    for table in ('intervals', 'coverage', 'issues'):
+        for entry in after[table].values():
+            if explicit_links(entry) & ids:
+                raise ValueError(f'{table}: explicitly update or retire references to {sorted(ids)} in this batch.')
+        for entry in data.get(table, []):
+            if not explicit_links(entry) <= after['steps'].keys():
+                raise ValueError(f'{table}: replacement references must name active steps.')
+    result = []
+    for request in requests:
+        ident = request['id']
+        replacements = request['replacement_step_ids']
+        if not set(replacements) <= after['steps'].keys():
+            raise ValueError('retire_steps: replacement must be an active step, not self or another retirement.')
+        original = before['steps'][ident]
+        if check_step(original):
+            raise ValueError('Step retirement requires a structurally valid original record; correct its fields first.')
+        replacement_steps = [after['steps'][key] for key in replacements]
+        for replacement in replacement_steps:
+            previous = before['steps'].get(replacement['id'])
+            if previous and (any(value not in replacement['uncertainties'] for value in previous['uncertainties'])
+                             or (previous['status'] != 'confirmed' and replacement['status'] == 'confirmed')):
+                raise ValueError('Step retirement must preserve existing replacement uncertainties and unresolved status.')
+        if any(value not in [v for s in replacement_steps for v in s['uncertainties']]
+               for value in original['uncertainties']):
+            raise ValueError('Step retirement cannot erase inline uncertainties; carry them into replacement steps.')
+        if original['status'] != 'confirmed' and not any(s['status'] != 'confirmed' for s in replacement_steps):
+            raise ValueError('Step retirement cannot erase an unresolved step status; retain an unresolved replacement.')
+        protected_step_ids = {ident} | (set(replacements) & before['steps'].keys())
+        references = {table: [e for e in before[table].values() if protected_step_ids & explicit_links(e)]
+                      for table in ('intervals', 'coverage', 'issues')}
+        # A preceding interval retirement must not disconnect its unresolved expansion
+        # from the step. Keep that original relationship inspectable in this archive.
+        for row in conn.execute("SELECT payload FROM history WHERE kind='retired_interval' ORDER BY id"):
+            old_interval = json.loads(row[0])
+            if protected_step_ids & explicit_links(old_interval):
+                # One public ID may have multiple retired versions. Every payload
+                # retains its own issue/evidence links; a current row cannot mask it.
+                references['intervals'].append(old_interval)
+        related_issue_ids = {issue for table in ('intervals', 'coverage')
+                             for e in references[table] for issue in e['issue_ids']}
+        for key, issue in before['issues'].items():
+            if ((set(issue_steps(issue, list(before['steps'].values()))) & ({ident} | set(replacements))
+                 or key in related_issue_ids) and issue not in references['issues']):
+                references['issues'].append(issue)
+        for issue in references['issues']:
+            current = after['issues'][issue['id']]
+            if issue['status'] != 'resolved':
+                stable = lambda record: {k: v for k, v in record.items() if k not in ('step_id', 'step_ids')}
+                if (stable(issue) != stable(current) or not replacements
+                        or not (explicit_links(issue) - ids) <= explicit_links(current)
+                        or not (set(issue_steps(issue, list(before['steps'].values()))) - ids)
+                        <= set(issue_steps(current, list(after['steps'].values())))
+                        or not explicit_links(current) & set(replacements)
+                        or not set(issue_steps(current, replacement_steps)) & set(replacements)):
+                    raise ValueError('Step retirement must preserve unresolved issue content and link it to a replacement.')
+        related_intervals = {entry['id'] for entry in references['intervals']}
+        checks = [json.loads(r[0]) for r in conn.execute('SELECT payload FROM interval_checks')]
+        # Conservatively require a replacement when the linked interval has any expansion
+        # history. The existing audit still decides whether expansion has been resolved.
+        if not replacements and any(c['interval_id'] in related_intervals and c['conclusion'] == 'expand' for c in checks):
+            raise ValueError('Step retirement with an expansion anomaly requires an explicit replacement.')
+        after_references = {}
+        for table, entries in references.items():
+            key_field = 'frame_no' if table == 'coverage' else 'id'
+            keys = dict.fromkeys(entry[key_field] for entry in entries)
+            after_references[table] = [after[table][key] for key in keys if key in after[table]]
+        result.append(dict(id=ident, reason=request['reason'], reviewer=request['reviewer'],
+                           replacement_step_ids=replacements, recorded_at=now(), original_step=original,
+                           references_before=references, references_after=after_references))
+    return result
 
 
 def validate(conn, work, require_coverage=False, mode=None, force_source_hash=False, *, _include_review=True):
@@ -516,10 +623,14 @@ def validate(conn, work, require_coverage=False, mode=None, force_source_hash=Fa
             if not sheet or not sheet_valid.get(sheet['id']) or not any(
                     m['asset_id']==view['asset_id'] and m['source_sha256']==view['asset_sha256'] for m in sheet.get('members',[])):
                 err('bad_sheet_view',view['id'],'Overview sheet or original member hash is missing/changed.')
-    for row in conn.execute('SELECT * FROM steps'):
+    step_rows = [(r, False) for r in conn.execute('SELECT * FROM steps')]
+    step_rows += [(r, True) for r in conn.execute('SELECT * FROM step_retirements')]
+    for row, retired in step_rows:
         try:
             step = json.loads(row['payload'])
-        except (ValueError, TypeError):
+            if retired:
+                step = step['original_step']
+        except (ValueError, TypeError, KeyError):
             continue
         if check_step(step):
             continue  # Already diagnosed; do not dereference malformed legacy data.
@@ -545,6 +656,18 @@ def validate(conn, work, require_coverage=False, mode=None, force_source_hash=Fa
         except ValueError as exc:
             err('invalid_issue_evidence', row['id'], str(exc))
             continue
+        for ident in references:
+            if ident not in assets:
+                err('unknown_evidence', row['id'], ident)
+            elif ident not in seen_assets:
+                err('unreviewed_evidence', row['id'], ident)
+    # Historical issue/interval/coverage references belong to the correction's
+    # provenance too, even after their active versions have been corrected.
+    for row in conn.execute('SELECT * FROM step_retirements'):
+        try:
+            references = evidence_references(json.loads(row['payload']))
+        except (ValueError, TypeError):
+            continue  # Contract diagnostics already retain malformed archives.
         for ident in references:
             if ident not in assets:
                 err('unknown_evidence', row['id'], ident)
@@ -598,7 +721,7 @@ def export_records(conn, work, force_source_hash=False):
     s = report['status']
     report['validation']['review_complete'] = bool(report['validation']['valid'] and s['full_compute_complete']
         and s['selected_candidates_review_complete_recorded'] and report['coverage_audit']['review_gate_passed_recorded'])
-    for table in ['candidates', 'assets', 'views', 'steps', 'issues', 'coverage', 'omission_reviews', 'history',
+    for table in ['candidates', 'assets', 'views', 'steps', 'step_retirements', 'issues', 'coverage', 'omission_reviews', 'history',
                   'segments', 'intervals', 'interval_checks', 'layer_reviews', 'sheets', 'language_sources']:
         report[table] = [dict(r) for r in conn.execute(f'SELECT * FROM {table}')]
         for row in report[table]:

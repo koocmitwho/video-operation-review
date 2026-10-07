@@ -1,6 +1,6 @@
 # 公开案例与独立试用 / Public cases and independent trial
 
-这些材料来自2026-10-06使用RC.3进行的外部录屏试用，随RC.4提供公开摘要与可移植材料。运行逻辑没有因此改变。
+下列三个历史案例来自2026-10-06使用RC.3进行的外部录屏试用，随RC.4提供公开摘要与可移植材料。当轮运行逻辑没有因此改变。
 
 | 案例 | 输入 | 实际结果 | 审阅完成度 |
 |---|---|---|---|
@@ -9,6 +9,10 @@
 | case-inkscape-01，语言选择 | 64.289秒，1903个解码帧 | 选择Tamil后退出，再切到已有Tamil窗口；不能证明新启动生效 | 585候选至少有概览或原图登记，507仍缺原图级；Q01/Q02保留 |
 
 来源、固定URL、许可和SHA-256见[sources.json](sources.json)，当前数字见[results.json](results.json)。两个VS Code片段来自同一文档集合，不能当两个独立作者群体。原视频不随包提供；取得素材后先核对SHA-256，再按技能审阅。软件自身开源不等于视频许可，见[第三方声明](THIRD_PARTY_NOTICES.md)。
+
+## 后续完整操作案例（2026-10-07）
+
+另增[Python 异常处理案例](python-exception-20261007/README.md)：不同作者的 CC BY 3.0、153.581 秒录屏，从完整可见的既有脚本到两组运行结果。首次交付与仅按交付照做分别冻结后才打开参考；最终独立视觉复核通过当前门禁。原片未展示安装或建文件，普通 Python 复演不等同于 Spyder 界面复现；该例不用于宣称省时或真人可靠性。
 
 ## 一次新上下文代理试用
 
@@ -29,6 +33,8 @@
 ## English
 
 These summaries describe three external-recording trials performed with RC.3 and packaged with RC.4. They do not represent a runtime algorithm change. See the pinned sources, hashes, licenses, and result JSON above; source videos are not bundled. The two VS Code clips belong to one documentation collection.
+
+A later [Python exception-handling case](python-exception-20261007/README.md) uses a different creator's complete 153.581-second recording. Fresh authoring, delivery-only replay, and independent visual review are separately frozen and scoped; the reference is unsealed only after the first delivery and replay. Installation, file creation, native Spyder replay, human reliability, and time savings are not established.
 
 Both editor operations were reproduced in a real browser editor. Only the regex case passed its complete review gate. Inkscape still has 507 candidates lacking native-level viewing and two unresolved source outcomes. A pre-existing translated window does not prove that the new preference took effect after restart.
 

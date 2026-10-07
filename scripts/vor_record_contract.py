@@ -147,20 +147,78 @@ def check_import_records(data):
             if entry['id'] in seen:
                 raise ValueError(f'{path}.id: duplicate id {entry["id"]!r} within one import.')
             seen.add(entry['id'])
+    retirements = data.get('retire_steps', [])
+    if not isinstance(retirements, list):
+        raise ValueError('retire_steps: must be an array.')
+    seen = set()
+    for index, entry in enumerate(retirements):
+        path = f'retire_steps[{index}]'
+        if not isinstance(entry, dict) or not all(_text(entry.get(k)) for k in ('id', 'reason', 'reviewer')):
+            raise ValueError(f'{path}: id, reason and reviewer must be nonempty strings.')
+        refs = entry.get('replacement_step_ids')
+        if not _strings(refs) or len(refs) != len(set(refs)):
+            raise ValueError(f'{path}.replacement_step_ids: must be an array of distinct step IDs (may be empty).')
+        if entry['id'] in seen or entry['id'] in {s['id'] for s in data.get('steps', [])}:
+            raise ValueError(f'{path}: duplicate or conflicting retirement ID.')
+        seen.add(entry['id'])
+
+
+def check_step_retirement(entry, path='step_retirement'):
+    errors = _common(entry, path)
+    if not isinstance(entry, dict):
+        return errors
+    for key in ('id', 'reason', 'reviewer', 'recorded_at'):
+        if not _text(entry.get(key)):
+            errors.append(f'{path}.{key}: must be a nonempty string.')
+    refs = entry.get('replacement_step_ids')
+    if not _strings(refs) or len(refs) != len(set(refs)):
+        errors.append(f'{path}.replacement_step_ids: must be an array of distinct step IDs.')
+    elif entry.get('id') in refs:
+        errors.append(f'{path}.replacement_step_ids: cannot reference itself.')
+    original = entry.get('original_step')
+    errors.extend(check_step(original, f'{path}.original_step'))
+    if isinstance(original, dict) and original.get('id') != entry.get('id'):
+        errors.append(f'{path}.original_step.id: must match the retired ID.')
+    for field in ('references_before', 'references_after'):
+        references = entry.get(field)
+        if not isinstance(references, dict):
+            errors.append(f'{path}.{field}: must be an object.')
+            continue
+        for table in ('intervals', 'coverage', 'issues'):
+            rows = references.get(table)
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                errors.append(f'{path}.{field}.{table}: must be an array of record objects.')
+    return errors
 
 
 def record_contract_errors(conn):
     """Diagnose legacy bad rows without rewriting or dropping them."""
     errors = []
-    for table, check, code in (('steps', check_step, 'invalid_step'), ('issues', check_issue, 'invalid_issue')):
+    for table, check, code in (('steps', check_step, 'invalid_step'), ('issues', check_issue, 'invalid_issue'),
+                               ('step_retirements', check_step_retirement, 'invalid_retired_step')):
         for row in conn.execute(f'SELECT id,payload FROM {table}'):
             path = f'{table}[id={row[0]!r}]'
             try:
                 payload = json.loads(row[1])
                 messages = check(payload, path)
+                if table == 'step_retirements' and not messages:
+                    from vor_audit import check_aux_records
+                    from vor_layers import check_layer_records
+                    for field in ('references_before', 'references_after'):
+                        references = payload[field]
+                        for index, issue in enumerate(references['issues']):
+                            messages.extend(check_issue(issue, f'{path}.{field}.issues[{index}]'))
+                        # Historical versions are not one import batch. Reused IDs
+                        # are legal here, but every original payload must be valid.
+                        for reference_table, check_refs in (('coverage', check_aux_records), ('intervals', check_layer_records)):
+                            for index, reference in enumerate(references[reference_table]):
+                                try:
+                                    check_refs(conn, {reference_table: [reference]})
+                                except (ValueError, TypeError, KeyError) as exc:
+                                    messages.append(f'{path}.{field}.{reference_table}[{index}]: {exc}')
                 if isinstance(payload, dict) and payload.get('id') != row[0]:
                     messages.append(f'{path}.id: payload and stored ID differ.')
-            except (ValueError, TypeError) as exc:
+            except (ValueError, TypeError, KeyError) as exc:
                 messages = [f'{path}: {exc}']
             errors.extend(dict(code=code, reference=row[0], message=message) for message in messages)
     return errors

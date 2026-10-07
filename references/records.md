@@ -68,6 +68,26 @@
 
 `steps` 和 `issues` 中的 ID 必须是非空字符串；同一批各自列表中不能重复，跨批同 ID 更新继续保留。导入先校验整批，再进入写入事务；类型或同批 ID 冲突会给出如 `steps[0].role_evidence` 的字段位置，整批不会部分写入。已知 `role_evidence`、`transition` 及其受支持子字段须符合文档结构；所有 `evidence` 引用均为非空资产 ID 的列表，JSON 数值须有限。尚未提供的语义证据仍由审计列为缺口，不能为通过结构校验补造事实。未知扩展字段仍保留，schema 继续为 3。
 
+## 纠正误设步骤
+
+片头已经存在的参数可以作为真实操作的前提；没有发生操作时，不必为了填表将其单列为步骤。若已有记录误设，可在原库用 `import-records` 的顶层 `retire_steps` 数组纠正：每项必填非空的 `id`、`reason`、`reviewer`，以及 `replacement_step_ids`（去重的有效步骤 ID 列表，可为空）。替代步骤既可已存在，也可在同批 `steps` 中新增或更新。理由说明误设之处和保留事实的位置，不是新的视觉证据。
+
+导入须在同一批明确处理所有相关 `intervals`、`coverage`、`issues` 的步骤关联；可改写关联，或通过既有 `retire_intervals` 撤下旧区间。程序不猜测关联，不接受遗留的退休 ID 引用。有效步骤与退休列表不能同批使用同一 ID；重复退休、失效替代、自指及同批互相替代均拒绝。退休 ID 不再复用，后续确需增加操作使用新 ID。
+
+原步骤完整 payload、理由、记录者、时间、替代 ID，以及关联记录的纠正前后状态保存到新增的 `step_retirements` 表与 `history` 中。当前 `steps` 只含有效步骤；导出 `review.json` 同时包含 `step_retirements`，报告附录展示纠错历史。原帧、PTS/RGB 身份、资产与查看事件保持不变；退休原记录与三类关联快照的字段、嵌套证据仍参与完整性校验。整批导入使用一个事务，后续任何记录失败都会回滚，包含已进行的退休和历史写入。
+
+退休不能关闭异常：关联的 open/blocked 疑点只能改步骤关联，原问题、状态、帧范围、补查历史及其他字段必须保留，并显式关联至少一个替代步骤；原来关联的其他有效步骤也须保留。范围相交及区间疑点同样受保护。原步骤的内嵌 uncertainties 须逐项保留到替代步骤，partial/unresolved 状态须由仍未确认的替代步骤承接。相关区间出现过 `expand` 抽查时，保守要求提供替代步骤；既有抽查、原范围及展开门禁持续保留，退休不会自动解决它们。没有替代步骤的撤下入口只适用于没有这些未解决内容及展开历史的误设记录。
+
+范围推断形成的其他步骤疑点关联同样保留；不能将其改为显式关联后漏掉仍受影响的操作。替代步骤若已存在，同一退休批次不得丢失它原有的不确定性或提升其未确认状态。退休步骤与既有替代步骤经当前 intervals/coverage 或历史 retired_interval 间接关联的疑点也进入保护集合，即使疑点自身没有步骤或帧范围字段。已经退休的关联区间也从历史中查回，避免先退休区间再退休步骤绕过展开保护。
+
+同一区间 ID 曾多次退休或被重新使用时，每条相关历史 payload 都单独保存在 `references_before.intervals`，各自的 issue_ids 和 evidence 继续参与保护与校验，当前版本不能遮蔽旧版本。归档中的这些同 ID 版本逐条校验；它们不是一批新的区间导入。普通导入仍拒绝同批重复 ID，原有跨批更新与区间退休入口不变。
+
+纠正会使绑定旧内容的 strict/layered 复核快照失效；快照纳入非空退休历史，因此“新增误设步骤→退休”也不能让更早的复核复活。没有退休历史时保持旧快照算法兼容。受影响区间的旧抽查也可能失效。按新内容重新核对并登记，不能复制旧 snapshot 冒充当前复核。`valid`、`review_complete` 和严格模式门禁不因退休而放宽。
+
+兼容边界：本实现对 schema 3 增量增加退休表，未使用退休的旧库与旧 JSON 继续可读写。RC.4 及更早程序不理解 `retire_steps`，会忽略该输入字段；它们也不会导出或检查新增退休表，因此**不能用旧程序继续写入、验证或重新导出已使用步骤退休的工作库**。继续使用支持该入口的程序，保留原 SQLite 和完整新导出；跨版本回退用未纠错的冻结副本，不能把旧程序的通过结论用于新退休契约。
+
+English contract: `retire_steps` is an atomic, reasoned correction in the existing ledger. Active steps are exported separately from immutable retired originals and their before/after references. Source frames, assets and view events stay unchanged; archived evidence still participates in integrity checks. Open questions, inline uncertainties and expansion history cannot be erased, and prior review snapshots become stale. Schema 3 gains an additive retirement table. RC.4 and earlier ignore the new request and archive: do not use those versions to write, validate or re-export a ledger that uses retirement. They remain supported for untouched legacy ledgers.
+
 ## 查看登记
 
 record-view 接收 asset ID、actor、tool、trace 和具体 observation。工具类型为 view_image、read_image、image_tool、visible_attachment；封装工具的实际名称写入 trace。

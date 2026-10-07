@@ -2,7 +2,7 @@
 
 简体中文 | [English](README.en.md)
 
-固定版本预发布候选：**0.1.0-rc.4**。版本号见 [VERSION](VERSION)，本次验证材料与试用包范围见 [RC.4 说明](references/release-rc4.md)；历史候选见 [RC.3 说明](references/release-rc3.md)、[RC.2 说明](references/release-rc2.md) 和 [RC.1 说明](references/release-candidate.md)。
+固定版本预发布候选：**0.1.0-rc.5**。版本号见 [VERSION](VERSION)，本次步骤纠错与验收范围见 [RC.5 说明](references/release-rc5.md)；历史候选见 [RC.4 说明](references/release-rc4.md)、[RC.3 说明](references/release-rc3.md)、[RC.2 说明](references/release-rc2.md) 和 [RC.1 说明](references/release-candidate.md)。
 
 **面向软件操作录屏的分层审阅技能：还原操作步骤，保留画面。**
 
@@ -12,7 +12,7 @@
 
 > 脚本负责视频索引、证据管理和记录检查；操作语义由 AI 助手实际查看图片后判断。
 
-RC.4 增加[三个公开录屏案例的验证摘要](examples/open-cases/README.md)和[可移植的独立试用材料](examples/open-cases/trial/README.md)。已有一次新上下文代理照做通过内容核验，未建立真人可靠性或总体省时；运行逻辑、schema 3 与审阅门禁未改。
+RC.5 增加[带历史的同库步骤纠错](references/records.md)及[新来源 Python 操作案例](examples/open-cases/python-exception-20261007/README.md)。三组代理配对均避免重建，总耗时没有稳定下降；未建立真人可靠性或总体省时。分组算法与审阅完成条件保持原样，已有退休历史的库须使用 RC.5 或更新版本继续维护。
 
 ## 主要作用
 
@@ -22,6 +22,7 @@ RC.4 增加[三个公开录屏案例的验证摘要](examples/open-cases/README.
 - **检查缺口并局部展开。** 检查重叠、状态跳变和缺失；对合并或低优先级区间抽查，发现异常后展开相关窗口。
 - **接收字幕和已有转写。** 支持 SRT、VTT、内嵌文本字幕及带明确时间基准的转写 JSON；保留原文、可选译文、来源、偏移和重叠提示。
 - **保留审阅进度。** 使用 SQLite 保存索引、证据、查看记录、步骤和疑点；支持暂停后继续，并复用已有结果。
+- **同库更正误设步骤。** 带理由退休或替代步骤，保留原记录和关联历史；非法纠错整批回滚，旧复核结论失效，未解决疑点和异常展开继续保留。
 
 ## 环境要求
 

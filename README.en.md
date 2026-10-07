@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | English
 
-Fixed prerelease candidate: **0.1.0-rc.4**. See [VERSION](VERSION) and the [RC.4 notes](references/release-rc4.md) for the validation-material and trial-pack scope; earlier candidates are documented in the [RC.3 notes](references/release-rc3.md), [RC.2 notes](references/release-rc2.md), and [RC.1 notes](references/release-candidate.md).
+Fixed prerelease candidate: **0.1.0-rc.5**. See [VERSION](VERSION) and the [RC.5 notes](references/release-rc5.md) for step correction and validation scope; earlier candidates are documented in the [RC.4 notes](references/release-rc4.md), [RC.3 notes](references/release-rc3.md), [RC.2 notes](references/release-rc2.md), and [RC.1 notes](references/release-candidate.md).
 
 **A layered review skill for software screen recordings: reconstruct operations and preserve video frames.**
 
@@ -12,7 +12,7 @@ For example, if a video shows someone entering `0.20`, cancelling, then entering
 
 > The scripts handle video indexing, evidence management, and record checks. The AI assistant interprets the operations by actually viewing the images.
 
-RC.4 adds [validation summaries for three public recordings](examples/open-cases/README.md) and a [portable independent-trial pack](examples/open-cases/trial/README.md). One fresh-context agent replay passed the content check; human reliability and overall time savings remain unestablished. Runtime logic, schema 3, and review gates are unchanged.
+RC.5 adds [same-ledger step correction with history](references/records.md) and a [new-source Python operation case](examples/open-cases/python-exception-20261007/README.md). Three agent pairs avoided rebuilding, but total elapsed time did not improve consistently; human reliability and overall time savings remain unestablished. Grouping and completion criteria are unchanged. Ledgers containing retirement history must be maintained with RC.5 or a later compatible version.
 
 ## Features
 
@@ -22,6 +22,7 @@ RC.4 adds [validation summaries for three public recordings](examples/open-cases
 - **Gap checks and local expansion.** Check for overlaps, state discontinuities, and missing information. Sample merged or lower-priority intervals, and expand the relevant window when an anomaly is found.
 - **Subtitles and existing transcripts.** Accept SRT, VTT, embedded text subtitles, and transcript JSON with an explicit time base. Preserve the original text, optional translations, sources, offsets, and overlap warnings.
 - **Persistent review progress.** Store indexes, evidence, viewing records, steps, and open questions in SQLite. Resume after a pause and reuse existing results.
+- **Same-ledger step correction.** Retire or replace a mistaken step with a reason and preserved relationship history. Invalid corrections roll back atomically, old reviews become stale, and unresolved issues and required anomaly expansion remain visible.
 
 ## Requirements
 

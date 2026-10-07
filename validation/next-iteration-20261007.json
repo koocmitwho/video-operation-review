@@ -1,0 +1,261 @@
+{
+  "date": "2026-10-07",
+  "status": "local_unpublished",
+  "baseline_commit": "45ea1511021dc41937a7cdeddb2af8f06939f200",
+  "candidate": "step-correction candidate-v5",
+  "version_file_retains_last_release": true,
+  "runtime_files": {
+    "scripts/check_release.py": "256c9331901982da3a3e6e12600da4a18a2ef909fff07c27464cd8d211296a6f",
+    "scripts/review_video.py": "9a569681ccbda905da8ebb9073a1dd5928c0108272c26b9478e9f1c9f4ae5796",
+    "scripts/vor_audit.py": "6386aa4645dce0321ab292848412de78475d463545abd681b538194f38e6e310",
+    "scripts/vor_environment.py": "d73a71040122999c32d023a0c7a1ff54dbaf5fc117e068a35fbc3f079c31f4a2",
+    "scripts/vor_export.py": "84837e2ee31cec188a2b2cd3f889e210b8337de6fba189cd4fbb0e4a49f7e8f1",
+    "scripts/vor_input_policy.py": "1ba07e9bc2114c3dc26358cc4819688ce22940e3e7649d9b5328c84cc422ae0c",
+    "scripts/vor_language.py": "e1ba30df7982d6e95736e099f3e284baa78ee0718e9a5578c1c9ef47f14aae42",
+    "scripts/vor_layer_audit.py": "f7905de7a147bfd781665c5810fd595dc8c6d13fd16e7f9ab44742ab438ea883",
+    "scripts/vor_layers.py": "ed4ad9157d2f29f7731931d81a990216930ecefedcbb81988fad88d67038e189",
+    "scripts/vor_media.py": "10e63a4dc4178a436155d41af539e437f84be05302085a069a82a224bc7fbb31",
+    "scripts/vor_record_contract.py": "0f16b4a69c2cb7a4527aa8526546cc7dece2d33fe37b5259f9be74cc53f61312",
+    "scripts/vor_report.py": "7d29cf47c878e90d3620f07aa39f65e4b0ca3cfeee59e8518e4060443e08a25c",
+    "scripts/vor_sheets.py": "cad31f39a6976ad7173b09cc1abcf43f5997fb565911065232c14030be5fffe5",
+    "scripts/vor_store.py": "228ee301216858dec4547f7f2d9052064454844155983e8a1e6f86f101562ee4"
+  },
+  "runtime_files_manifest_sha256": "b52dcb575450656da9f509ba25aa623c476cf2eb942823244202de5943e6ce84",
+  "engineering_tests": {
+    "python312": {
+      "run": 209,
+      "passed": 208,
+      "skipped": 1,
+      "seconds": 192.982,
+      "log": "tests-next-iteration-py312-20261007.log",
+      "raw_external_log_basename": "candidate-full-tests-v5.log"
+    },
+    "python310": {
+      "run": 209,
+      "passed": 208,
+      "skipped": 1,
+      "seconds": 261.095,
+      "log": "tests-next-iteration-py310-20261007.log",
+      "raw_external_log_basename": "candidate-full-tests-py310-v5.log"
+    }
+  },
+  "distributed_logs": [
+    {
+      "file": "tests-next-iteration-py312-20261007.log",
+      "raw_sha256": "73f126c2da360e027eb660bf27ac59c906d723b6b3f2a78ee98495a2613cac49",
+      "distributed_sha256": "ee26a90048e4c9bf1219957dc2ad9fe484f3e945bca5d8211bfbd6a907c69d0c",
+      "transform": "UTF-8, LF newline normalization only; original raw log preserved outside product."
+    },
+    {
+      "file": "tests-next-iteration-py310-20261007.log",
+      "raw_sha256": "fed4cf8d5834b85bf2bd20261be2db7c20829d46a932418ce55b6bfd98a83db9",
+      "distributed_sha256": "bf8ed29ebba7d1f61204e6e7dde1ddb8d8ec67e89ae82859da05b54fdf3e2226",
+      "transform": "UTF-8, LF newline normalization only; original raw log preserved outside product."
+    }
+  ],
+  "new_product_tests": 28,
+  "independent_code_tests": 17,
+  "independent_archive_matrix_scenarios": 18,
+  "development_findings_resolved": [
+    "F01",
+    "F02",
+    "F03",
+    "F04",
+    "F05",
+    "F06",
+    "F07",
+    "F08"
+  ],
+  "strict_empty_retirement_snapshot_compatible": true,
+  "grouping_experiment": {
+    "strategies_tried": 1,
+    "inkscape_segments_before": 394,
+    "inkscape_segments_trial": 154,
+    "inkscape_candidates_before": 585,
+    "inkscape_candidates_trial": 585,
+    "original_request_rows_identical": true,
+    "decision": "rejected_and_reverted",
+    "runtime_vor_layers_sha256_equals_rc4": true
+  },
+  "attribution": {
+    "layout_boundaries": 393,
+    "area_only": 0,
+    "global_only": 248,
+    "both": 145,
+    "single_frame_segments": 291,
+    "causal_scope": "Metric branch attribution plus sampled visual observations; not whole-video semantic classification."
+  },
+  "same_ledger_regex": {
+    "valid": true,
+    "review_complete": true,
+    "original_views_unchanged": 39,
+    "new_independent_native_full_inputs": 38,
+    "new_independent_crop_inputs": 1,
+    "old_snapshots_invalidated": true,
+    "source_and_evidence_identity_preserved": true
+  },
+  "paired_scope": "Three pairs of seeded development-case author correction through first frozen delivery; independent review/replay excluded from measured endpoint.",
+  "paired_model": "gpt-6-astra/ultra (host turn_context verified for all six)",
+  "paired_fork_turns": "none (all six dispatches verified)",
+  "paired_runs": [
+    {
+      "run": "r1-a",
+      "arm": "RC4",
+      "wall_seconds": 678.506158,
+      "full_image_inputs": 38,
+      "crop_image_inputs": 1,
+      "overview_image_inputs": 0,
+      "new_view_registrations_across_attempts": 78,
+      "correction_batches": 1,
+      "rebuilds": 1,
+      "unexpected_tool_errors": 2,
+      "expected_pending_review_exits": 2,
+      "help_requests": 0,
+      "valid": true,
+      "review_complete": false
+    },
+    {
+      "run": "r1-b",
+      "arm": "candidate_v5",
+      "wall_seconds": 528.457533,
+      "full_image_inputs": 38,
+      "crop_image_inputs": 1,
+      "overview_image_inputs": 0,
+      "new_view_registrations_across_attempts": 39,
+      "correction_batches": 1,
+      "rebuilds": 0,
+      "unexpected_tool_errors": 1,
+      "expected_pending_review_exits": 1,
+      "help_requests": 0,
+      "valid": true,
+      "review_complete": false
+    },
+    {
+      "run": "r2-a",
+      "arm": "RC4",
+      "wall_seconds": 543.536518,
+      "full_image_inputs": 38,
+      "crop_image_inputs": 1,
+      "overview_image_inputs": 0,
+      "new_view_registrations_across_attempts": 78,
+      "correction_batches": 3,
+      "rebuilds": 1,
+      "unexpected_tool_errors": 0,
+      "expected_pending_review_exits": 1,
+      "help_requests": 0,
+      "valid": true,
+      "review_complete": false
+    },
+    {
+      "run": "r2-b",
+      "arm": "candidate_v5",
+      "wall_seconds": 547.450415,
+      "full_image_inputs": 38,
+      "crop_image_inputs": 1,
+      "overview_image_inputs": 0,
+      "new_view_registrations_across_attempts": 39,
+      "correction_batches": 1,
+      "rebuilds": 0,
+      "unexpected_tool_errors": 0,
+      "expected_pending_review_exits": 1,
+      "help_requests": 0,
+      "valid": true,
+      "review_complete": false
+    },
+    {
+      "run": "r3-a",
+      "arm": "RC4",
+      "wall_seconds": 624.023635,
+      "full_image_inputs": 38,
+      "crop_image_inputs": 1,
+      "overview_image_inputs": 0,
+      "new_view_registrations_across_attempts": 78,
+      "correction_batches": 2,
+      "rebuilds": 1,
+      "unexpected_tool_errors": 1,
+      "expected_pending_review_exits": 1,
+      "help_requests": 0,
+      "valid": true,
+      "review_complete": false
+    },
+    {
+      "run": "r3-b",
+      "arm": "candidate_v5",
+      "wall_seconds": 487.430571,
+      "full_image_inputs": 38,
+      "crop_image_inputs": 1,
+      "overview_image_inputs": 0,
+      "new_view_registrations_across_attempts": 39,
+      "correction_batches": 1,
+      "rebuilds": 0,
+      "unexpected_tool_errors": 0,
+      "expected_pending_review_exits": 1,
+      "help_requests": 0,
+      "valid": true,
+      "review_complete": false
+    }
+  ],
+  "paired_times": [
+    {
+      "pair": 1,
+      "rc4_seconds": 678.506158,
+      "candidate_seconds": 528.457533,
+      "candidate_minus_rc4_seconds": -150.04862500000002,
+      "candidate_faster": true
+    },
+    {
+      "pair": 2,
+      "rc4_seconds": 543.536518,
+      "candidate_seconds": 547.450415,
+      "candidate_minus_rc4_seconds": 3.91389700000002,
+      "candidate_faster": false
+    },
+    {
+      "pair": 3,
+      "rc4_seconds": 624.023635,
+      "candidate_seconds": 487.430571,
+      "candidate_minus_rc4_seconds": -136.59306400000003,
+      "candidate_faster": true
+    }
+  ],
+  "time_savings_established": false,
+  "paired_image_host_verification": {
+    "runs": 6,
+    "actual_returned_image_items_each": 39,
+    "each_run_all_image_sha256s_match_frozen_seed_assets": true,
+    "implies_semantic_truth": false
+  },
+  "heldout_case": "../examples/open-cases/python-exception-20261007/README.md",
+  "semantic_review_scope": "Separate independent post-freeze adjudication; valid is not semantic accuracy. Process attribution mistakes are preserved in local receipts.",
+  "unresolved_prior_source_gaps": [
+    "Inkscape Q01 restart application not demonstrated",
+    "Inkscape Q02 recording save result not demonstrated"
+  ],
+  "human_validation": false,
+  "generalization_established": false,
+  "new_remote_matrix": "not_run",
+  "new_release_download_acceptance": "not_run",
+  "committed": false,
+  "pushed": false,
+  "published": false,
+  "full_release_conditions_met": false,
+  "raw_materials_distributed": false,
+  "paired_independent_adjudication": {
+    "final_critical_operation_errors": 0,
+    "visible_action_omissions_found": 0,
+    "frozen_artifacts_rehashed": 70,
+    "independent_native_inputs": 39,
+    "frozen_provenance_errors": [
+      "r1-a: unsupported claim that initial replacement value had doubled backslashes",
+      "r2-a: same unsupported initial-value attribution"
+    ],
+    "retracted_pre_freeze_hypotheses": [
+      "r1-b: duplicated-backslash hypothesis explicitly rejected"
+    ],
+    "r2b_pre_open_byte_measurement_limit_retained": true,
+    "r2b_eight_table_pre_correction_identity_verified": true,
+    "human_gold": false,
+    "zero_semantic_omissions_proven": false
+  },
+  "paired_time_boundary": "Participant metrics cutoff immediately before or at hashing; exact freeze timestamps differ by less than0.3s and remain in raw frozen files."
+}

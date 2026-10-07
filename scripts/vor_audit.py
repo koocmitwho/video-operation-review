@@ -78,6 +78,11 @@ def content_snapshot(conn):
         add(table)
         for row in conn.execute(f'SELECT payload FROM {table} ORDER BY {ordering}'):
             add(json.loads(row[0]))
+    retired = [json.loads(row[0]) for row in conn.execute('SELECT payload FROM step_retirements ORDER BY id')]
+    if retired:
+        # Empty retirement history preserves old snapshot bytes. Once corrected,
+        # returning to an earlier active step set cannot revive its old review.
+        add({'step_retirements': retired})
     # New crops or redundant images do not change the authored content. Only cited assets are pinned.
     refs = set()
     for table in ['steps', 'issues', 'coverage']:

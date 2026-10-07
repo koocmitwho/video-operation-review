@@ -378,4 +378,12 @@ def audit_appendix(report):
     lines += [f"- {text(e['code'])} · {text(e['reference'])}：{text(e['message'])}" for e in result['errors']] or ['- 无。']
     lines += ['', '警告：', '']
     lines += [f'- {text(warning)}' for warning in result['warnings']] or ['- 无。']
+    if report.get('step_retirements'):
+        lines += ['', '### 步骤纠错历史', '',
+                  '以下记录已从当前操作步骤中退休；原记录、关联前后状态和完整历史保存在 review.json。', '']
+        for row in report['step_retirements']:
+            entry = row['payload']
+            replacements = '、'.join(text(value) for value in entry['replacement_step_ids']) or '无（撤下误设步骤）'
+            lines += [f"- {text(entry['id'])} → {replacements}；理由：{text(entry['reason'])}；"
+                      f"记录者：{text(entry['reviewer'])}；时间：{text(entry['recorded_at'])}。"]
     return lines

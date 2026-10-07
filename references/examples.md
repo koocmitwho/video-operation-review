@@ -84,3 +84,20 @@ $ReviewWork = 'D:\video-reviews\tutorial'
 > 请使用 `$video-operation-review` 审阅本轮软件录屏，给出可照做的步骤、各对象的最终参数、关键截图和仍需确认的地方。
 
 完整交付样式见 [软件教程示例](../examples/tutorial/report.md)。用户交付先给操作说明，覆盖统计和底层记录置于其后。
+
+## 在同一账本纠正误设步骤
+
+例如 S01 只描述片头已存在的条件，实际操作是 S02。先核对现有 `steps`、`intervals`、`coverage`、`issues`，将片头条件保存在 S02 前提中；将受影响记录的完整更新内容与下面的退休请求写入同一个 JSON，再运行上面的 `import-records`。这只是退休字段的例子，不能省略实际存在的关联更新。
+
+```json
+{
+  "retire_steps": [{
+    "id": "S01",
+    "reason": "片头字段已经存在，没有输入动作；条件保留在 S02 操作前提中。",
+    "reviewer": "本次实际纠错者",
+    "replacement_step_ids": ["S02"]
+  }]
+}
+```
+
+如果 I01 原来绑定 S01，则在同批 `intervals` 提交完整 I01，明确其新的 `step_ids`；有 Q01 等疑点或严格模式 coverage 引用时也须一并处理。没有替代操作的误设记录可使用空 `replacement_step_ids`，但不得丢失未解决内容或相关展开历史。随后重新运行 audit；旧抽查或复核显示 stale 时，根据当前内容重新核对和登记，再验证并导出。保留原库，不重新扫描、不重复登记已经看过的图，也不修改旧查看调用引用。完整保护与跨版本边界见 [记录契约](records.md)。
