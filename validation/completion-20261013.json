@@ -1,0 +1,200 @@
+{
+  "prepared_on": "2026-10-13",
+  "candidate_version": "0.1.0-rc.6",
+  "scope": "Machine scan and plan comparison only; no visual review or overall review-time measurement.",
+  "source": {
+    "case_id": "case-inkscape-01",
+    "duration_seconds": 64.289,
+    "sha256": "b847ea44664d16748e3034b81a67fa8fe127d3d611b83299a491e5b6424692fb",
+    "size_bytes": 35266253,
+    "source_and_license_reference": "examples/open-cases/sources.json",
+    "third_party_notices": "examples/open-cases/THIRD_PARTY_NOTICES.md"
+  },
+  "environment": {
+    "os": "Windows",
+    "python": "3.12.10",
+    "numpy": "2.5.1",
+    "ffmpeg": "8.1.2-full_build-www.gyan.dev"
+  },
+  "selected_pairs": [
+    2,
+    3
+  ],
+  "chronological_order": [
+    "before-1",
+    "after-1",
+    "before-2",
+    "after-2",
+    "after-3",
+    "before-3"
+  ],
+  "diagnostic_pair_1_exclusion": "Before-1 overlapped approximately 2 seconds of kernel diagnosis; retained but excluded from isolated acceptance pairs.",
+  "frame_fields_compared": [
+    "frame_no",
+    "pts",
+    "pts_time",
+    "best_effort_timestamp",
+    "best_effort_time",
+    "time_s",
+    "time_source",
+    "width",
+    "height",
+    "key_frame",
+    "duration_time",
+    "digest",
+    "exact_start",
+    "global_delta",
+    "max_local_delta",
+    "changed_pixels",
+    "changed_fraction",
+    "tiles"
+  ],
+  "pairs": [
+    {
+      "pair": 2,
+      "before_scan_seconds": 111.39433840000129,
+      "after_scan_seconds": 72.03883680000035,
+      "saved_scan_seconds": 39.355501600000935,
+      "saved_scan_percent": 35.329893929331405,
+      "before_metrics_seconds": 88.77899269999943,
+      "after_metrics_seconds": 49.77575470001648,
+      "ledger_comparisons": {
+        "frames": {
+          "count_before": 1903,
+          "count_after": 1903,
+          "exact_equal": true,
+          "before_sha256": "f674dc04244cf692ef2866bf3f85e2d61a73be2bd869def51b0cc6db2fe3a797",
+          "after_sha256": "f674dc04244cf692ef2866bf3f85e2d61a73be2bd869def51b0cc6db2fe3a797"
+        },
+        "segments": {
+          "count_before": 394,
+          "count_after": 394,
+          "exact_equal": true,
+          "before_sha256": "d46b0d32f1a2858ce973df3bcba954c986530a1c4e452f8d4f133fa02c2ff11d",
+          "after_sha256": "d46b0d32f1a2858ce973df3bcba954c986530a1c4e452f8d4f133fa02c2ff11d"
+        },
+        "requests": {
+          "count_before": 573,
+          "count_after": 573,
+          "exact_equal": true,
+          "before_sha256": "34659b5ae84c1e1f6788de654b72de8e7990f2f12baa47b91e967fbde0a10768",
+          "after_sha256": "34659b5ae84c1e1f6788de654b72de8e7990f2f12baa47b91e967fbde0a10768"
+        },
+        "candidates": {
+          "count_before": 573,
+          "count_after": 573,
+          "exact_equal": true,
+          "before_sha256": "bf771eacec7b4a17d291d8a6b0b93ed609c194206964cabea62f888ee4e9729e",
+          "after_sha256": "bf771eacec7b4a17d291d8a6b0b93ed609c194206964cabea62f888ee4e9729e"
+        }
+      },
+      "actual_image_tool_inputs_before": 0,
+      "actual_image_tool_inputs_after": 0,
+      "actual_image_tool_calls_before": 0,
+      "actual_image_tool_calls_after": 0,
+      "visual_review_performed": false
+    },
+    {
+      "pair": 3,
+      "before_scan_seconds": 116.33620819999851,
+      "after_scan_seconds": 74.06879759999902,
+      "saved_scan_seconds": 42.267410599999494,
+      "saved_scan_percent": 36.33211985673093,
+      "before_metrics_seconds": 93.4987992000315,
+      "after_metrics_seconds": 50.18768529999943,
+      "ledger_comparisons": {
+        "frames": {
+          "count_before": 1903,
+          "count_after": 1903,
+          "exact_equal": true,
+          "before_sha256": "f674dc04244cf692ef2866bf3f85e2d61a73be2bd869def51b0cc6db2fe3a797",
+          "after_sha256": "f674dc04244cf692ef2866bf3f85e2d61a73be2bd869def51b0cc6db2fe3a797"
+        },
+        "segments": {
+          "count_before": 394,
+          "count_after": 394,
+          "exact_equal": true,
+          "before_sha256": "d46b0d32f1a2858ce973df3bcba954c986530a1c4e452f8d4f133fa02c2ff11d",
+          "after_sha256": "d46b0d32f1a2858ce973df3bcba954c986530a1c4e452f8d4f133fa02c2ff11d"
+        },
+        "requests": {
+          "count_before": 573,
+          "count_after": 573,
+          "exact_equal": true,
+          "before_sha256": "34659b5ae84c1e1f6788de654b72de8e7990f2f12baa47b91e967fbde0a10768",
+          "after_sha256": "34659b5ae84c1e1f6788de654b72de8e7990f2f12baa47b91e967fbde0a10768"
+        },
+        "candidates": {
+          "count_before": 573,
+          "count_after": 573,
+          "exact_equal": true,
+          "before_sha256": "bf771eacec7b4a17d291d8a6b0b93ed609c194206964cabea62f888ee4e9729e",
+          "after_sha256": "bf771eacec7b4a17d291d8a6b0b93ed609c194206964cabea62f888ee4e9729e"
+        }
+      },
+      "actual_image_tool_inputs_before": 0,
+      "actual_image_tool_inputs_after": 0,
+      "actual_image_tool_calls_before": 0,
+      "actual_image_tool_calls_after": 0,
+      "visual_review_performed": false
+    }
+  ],
+  "interpretation": {
+    "frame_and_candidate_requirements_reduced": false,
+    "overall_review_time_savings_measured": false,
+    "human_acceptance_measured": false,
+    "semantic_accuracy_measured": false
+  },
+  "release_evidence": "Prepared candidate measurement summary; final regression, commit-specific CI and downloaded-install acceptance are recorded separately.",
+  "distribution": {
+    "original_external_videos_included": false,
+    "review_databases_included": false,
+    "supplement_snapshots_included": false,
+    "raw_sessions_included": false,
+    "personal_paths_included": false
+  },
+  "real_supplement_workflow": {
+    "valid": true,
+    "review_complete": false,
+    "primary_counts_unchanged": {
+      "frames": 44,
+      "assets": 44,
+      "views": 44,
+      "steps": 3
+    },
+    "actual_new_supplement_image_inputs": 2,
+    "source_identities": [
+      {
+        "case_id": "case-vscode-01",
+        "sha256": "a8463e34eb087c54fa144ea4016c80cea2fbc31cf2ffd97826c05a1504abdb4d",
+        "license": "CC-BY-3.0-US"
+      },
+      {
+        "case_id": "case-vscode-02",
+        "sha256": "19d4a1007116d95ffea7d2cf8991e09f25f4bbae57377dc045a378606c23390d",
+        "license": "CC-BY-3.0-US"
+      }
+    ],
+    "original_issue_status": "blocked",
+    "scope": "Independent extra example, not same-file continuation or resolution of original video gaps."
+  },
+  "real_question_queue": {
+    "total_candidates": 573,
+    "pending_before": 573,
+    "pending_after": 570,
+    "range_pending_before": 42,
+    "range_pending_after": 39,
+    "actual_native_images": 3,
+    "next_batch": [
+      1399,
+      1401,
+      1429
+    ],
+    "scope": "Only actual full-image viewing advances queue; other candidates retained; no complete visual review claimed."
+  },
+  "independent_review": {
+    "history_supplement_reference_gap": "Reproduced by independent reviewer; added failing regression, fixed, then independently rechecked missing registration and missing local views.",
+    "original_materials_preserved": true,
+    "human_semantic_ground_truth": false
+  }
+}

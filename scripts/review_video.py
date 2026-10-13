@@ -30,6 +30,10 @@ def parser():
         'subtitles': '解析 SRT/VTT/内嵌文本字幕，并按原始 PTS 对齐。',
         'transcript': '导入带时间基准的转写 JSON，保留原文和译文。',
         'candidates': '列出候选时间、原因、路径和阶段进度。',
+        'queue': '按问题时间范围优先返回一批待查看原图，不改变其余候选。',
+        'supplement-import': '从另一份完整导出保存独立来源的补证快照。',
+        'supplement-view': '登记补证原图的实际查看，不计入原片覆盖。',
+        'supplements': '检查本地补证快照和独立查看记录。',
         'focus': '按原始时间秒数为具体疑点追加候选。',
         'extract': '抽取证据 PNG，并核对源像素哈希。',
         'crop': '裁剪证据并保留源帧身份。',
@@ -68,6 +72,23 @@ def parser():
     s.add_argument('--end', type=float, required=True)
     s.add_argument('--stride', type=int, default=1)
     s.add_argument('--reason', required=True)
+    s = subs['queue']
+    s.add_argument('--start', type=float, help='优先范围的原始 PTS 起点，与 --end 一起使用。')
+    s.add_argument('--end', type=float)
+    s.add_argument('--batch-size', type=int, default=8, help='本次返回数量，不限制审阅总帧数。')
+    s = subs['supplement-import']
+    s.add_argument('--source-review', required=True, type=Path)
+    s.add_argument('--id', required=True)
+    s.add_argument('--assets', required=True, help='另一导出的完整原图资产 ID，逗号分隔。')
+    s.add_argument('--actor', required=True)
+    s.add_argument('--note', required=True)
+    s = subs['supplement-view']
+    s.add_argument('--id', required=True)
+    s.add_argument('--asset', required=True)
+    s.add_argument('--actor', required=True)
+    s.add_argument('--tool', required=True, choices=['view_image', 'read_image', 'image_tool', 'visible_attachment'])
+    s.add_argument('--trace', required=True)
+    s.add_argument('--observation', required=True)
     s = subs['extract']
     group = s.add_mutually_exclusive_group(required=True)
     group.add_argument('--candidates', action='store_true')
@@ -158,6 +179,20 @@ def main():
                 result = focus(conn, args.start, args.end, args.reason, args.stride)
             elif command == 'candidates':
                 result = candidate_manifest(conn, args.work, args.pending, args.start, args.end)
+            elif command == 'queue':
+                from vor_queue import question_queue
+                result = question_queue(conn, args.work, args.start, args.end, args.batch_size)
+            elif command == 'supplement-import':
+                from vor_supplements import import_supplement
+                result = import_supplement(conn, args.work, args.source_review, args.id,
+                                          args.assets.split(','), args.actor, args.note)
+            elif command == 'supplement-view':
+                from vor_supplements import record_supplement_view
+                result = record_supplement_view(conn, args.work, args.id, args.asset, args.actor,
+                                                args.tool, args.trace, args.observation)
+            elif command == 'supplements':
+                from vor_supplements import supplement_status
+                result = {'supplements': supplement_status(conn, args.work)}
             elif command == 'extract':
                 frames = ([r[0] for r in conn.execute('SELECT frame_no FROM candidates ORDER BY frame_no')]
                           if args.candidates else [int(n) for n in args.frames.split(',')])

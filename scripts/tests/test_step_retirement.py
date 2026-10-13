@@ -8,6 +8,11 @@ import vor_store as store
 from vor_audit import audit_omissions, content_snapshot
 
 
+def resolution():
+    return dict(mode='evidence', reviewer='synthetic', evidence=['f0'],
+                reason='Synthetic closure fixture referencing an existing viewed asset.')
+
+
 class StepRetirementContract(RecordFixture, unittest.TestCase):
     def setUp(self):
         super().setUp()
@@ -62,7 +67,7 @@ class StepRetirementContract(RecordFixture, unittest.TestCase):
     def test_all_active_links_require_explicit_handling_and_archive_before_after(self):
         interval = self.interval()
         issue = dict(id='Q0', status='resolved', question='Was the field readable?',
-                     step_ids=['S0'], attempts=[])
+                     step_ids=['S0'], attempts=[], resolution=resolution())
         coverage = dict(frame_no=0, classification='context', reason='Initial state',
                         reviewer='synthetic', evidence=['f0'], step_ids=['S0'], issue_ids=[])
         self.import_data({'intervals': [interval], 'issues': [issue], 'coverage': [coverage]})
@@ -121,7 +126,7 @@ class StepRetirementContract(RecordFixture, unittest.TestCase):
         replacement = step('S1')
         self.import_data({'issues': [issue]})
         before = self.database_snapshot()
-        for changes in ({'status': 'resolved', 'step_ids': ['S1']}, {'step_ids': []},
+        for changes in ({'status': 'resolved', 'resolution': resolution(), 'step_ids': ['S1']}, {'step_ids': []},
                         {'step_ids': ['S1'], 'attempts': []}, {'step_ids': ['S1'], 'question': 'Changed'}):
             with self.subTest(changes=changes):
                 changed = dict(issue, **changes)
@@ -139,7 +144,7 @@ class StepRetirementContract(RecordFixture, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unresolved|issue'):
             self.import_data({'retire_steps': [self.correction()]})
         self.assertEqual(before, self.database_snapshot())
-        self.import_data({'issues': [dict(issue, status='resolved')]})
+        self.import_data({'issues': [dict(issue, status='resolved', resolution=resolution())]})
         self.import_data({'steps': [dict(self.original, uncertainties=['Unconfirmed action'], status='partial')]})
         before = self.database_snapshot()
         with self.assertRaisesRegex(ValueError, 'uncertaint'):
@@ -339,7 +344,7 @@ class StepRetirementContract(RecordFixture, unittest.TestCase):
 
     def test_archived_reference_evidence_and_record_shape_remain_validated(self):
         issue = dict(id='Q0', status='resolved', question='Historic evidence', step_ids=['S0'],
-                     attempts=[{'evidence': ['missing-asset']}])
+                     attempts=[{'evidence': ['missing-asset']}], resolution=resolution())
         self.import_data({'issues': [issue]})
         self.import_data(dict(issues=[dict(issue, step_ids=[], attempts=[])], retire_steps=[self.correction()]))
         result = store.validate(self.conn, self.work)
@@ -368,7 +373,8 @@ class StepRetirementContract(RecordFixture, unittest.TestCase):
             self.import_data({'retire_intervals': ['I1']})
         before = self.database_snapshot()
         with self.assertRaisesRegex(ValueError, 'unresolved|issue'):
-            self.import_data(dict(issues=[dict(issue, status='resolved')], retire_steps=[self.correction(['S1'])]))
+            self.import_data(dict(issues=[dict(issue, status='resolved', resolution=resolution())],
+                                  retire_steps=[self.correction(['S1'])]))
         self.assertEqual(before, self.database_snapshot())
         linked = dict(issue, step_ids=['S1'])
         self.import_data(dict(issues=[linked], retire_steps=[self.correction(['S1'])]))
@@ -395,7 +401,8 @@ class StepRetirementContract(RecordFixture, unittest.TestCase):
         self.import_data({'intervals': [current]})
         before = self.database_snapshot()
         with self.assertRaisesRegex(ValueError, 'unresolved|issue'):
-            self.import_data(dict(issues=[dict(issue, status='resolved')], retire_steps=[self.correction(['S1'])]))
+            self.import_data(dict(issues=[dict(issue, status='resolved', resolution=resolution())],
+                                  retire_steps=[self.correction(['S1'])]))
         self.assertEqual(before, self.database_snapshot())
         self.import_data(dict(issues=[dict(issue, step_ids=['S1'])], retire_steps=[self.correction(['S1'])]))
         archive = json.loads(self.conn.execute('SELECT payload FROM step_retirements').fetchone()[0])
@@ -404,7 +411,8 @@ class StepRetirementContract(RecordFixture, unittest.TestCase):
         self.assertTrue(store.validate(self.conn, self.work)['valid'])
 
     def test_multiple_retired_versions_retain_each_issue_and_evidence_payload(self):
-        issues = [dict(id=f'Q{i}', status='resolved', question=f'Historical question {i}', attempts=[]) for i in (1, 2)]
+        issues = [dict(id=f'Q{i}', status='resolved', question=f'Historical question {i}', attempts=[],
+                       resolution=resolution()) for i in (1, 2)]
         self.import_data(dict(steps=[dict(self.original, id='S1')], issues=issues))
         old1 = dict(self.interval(), id='I1', step_ids=['S1'], issue_ids=['Q1'], reason='First retired version')
         old2 = dict(old1, issue_ids=['Q2'], evidence=['missing-historical-asset'], reason='Second retired version')

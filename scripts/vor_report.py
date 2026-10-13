@@ -4,6 +4,7 @@ import math
 from pathlib import Path
 from urllib.parse import quote
 from vor_store import issue_steps
+from vor_record_contract import issue_is_resolved
 
 
 def text(value):
@@ -69,7 +70,7 @@ def timestamp(frame_no, frames):
 
 def step_label(step, issues=(), findings=()):
     if step.get('status') == 'confirmed' and (findings or any(
-            i.get('status') != 'resolved' and step['id'] in issue_steps(i, [step]) for i in issues)):
+            not issue_is_resolved(i) and step['id'] in issue_steps(i, [step]) for i in issues)):
         return '部分确认，待核实（步骤登记为已确认）'
     return {'confirmed': '已确认（步骤登记）', 'partial': '部分确认，待核实',
             'unresolved': '待核实'}.get(step.get('status'), '状态未记录')
@@ -104,7 +105,7 @@ def parameter_scope(step, actual, issues, record_valid, findings=()):
         return '生效未核实（记录完整性待修复）'
     if findings:
         return '生效未核实（审计发现冲突或证据缺口）'
-    blocked = any(issue.get('status') != 'resolved' and step['id'] in issue_steps(issue, [step]) for issue in issues)
+    blocked = any(not issue_is_resolved(issue) and step['id'] in issue_steps(issue, [step]) for issue in issues)
     if step.get('status') != 'confirmed' or step.get('uncertainties') or unknown(actual) or blocked:
         return '生效未核实'
     transition = step.get('transition') or {}
@@ -187,12 +188,71 @@ def evidence_roles(step, ident):
     return '、'.join(roles) or '角色未记录'
 
 
+def step_anchor(step):
+    """Keep arbitrary legal record IDs out of HTML attributes and fragment syntax."""
+    return 'step-' + step['id'].encode('utf-8').hex()
+
+
+def action_fields(step):
+    input_action = step.get('input_action')
+    input_text = (text(input_action) if isinstance(input_action, str) and input_action.strip() else
+                  '输入过程未单独记录；请结合确认动作与前后画面核对，阶段参数不代表输入动作。')
+    return [('点击哪里', ' → '.join(readable(v) for v in step.get('menu_path', [])) or '入口未记录'),
+            ('选择什么', readable(step.get('selected_objects', []))), ('填写什么', input_text),
+            ('如何确认', text(step.get('confirmation_action'))),
+            ('应看到什么', text(step.get('visible_result')))]
+
+
+def resolution_lines(issue, assets):
+    resolution = issue.get('resolution')
+    if not resolution:
+        return []
+    if not isinstance(resolution, dict):
+        return ['', f'历史结案说明（依据待补）：{readable(resolution)}。']
+    mode = {'evidence': '证据确认', 'withdrawn': '撤回误设问题'}.get(resolution.get('mode'), '待核实')
+    lines = ['', '解决依据：', '', f'- 结案方式：{mode}。',
+             f"- 记录者：{text(resolution.get('reviewer'))}。",
+             f"- 理由：{text(resolution.get('reason'))}。"]
+    if resolution.get('basis'):
+        lines.append(f"- 核对依据：{text(resolution['basis'])}。")
+    if resolution.get('evidence'):
+        lines.append(f"- 结案证据：{references(resolution['evidence'], assets)}。")
+    return lines
+
+
+def followup_lines(issue, report):
+    followup = issue.get('followup')
+    if not followup:
+        return []
+    snapshots = {item['id']: item for item in report.get('supplements', [])}
+    lines = ['', '**后续资料（独立来源）**', '',
+             f'后续主张（按审阅者记录）：{text(followup["claim"])}。',
+             f'原片限制：{text(followup["original_record_limit"])}。',
+             '补证不补写原片过程，不计入原片的候选查看、确认动作或审阅完成度。',
+             f'记录者：{text(followup["reviewer"])}。', '']
+    for ref in followup['supplement_refs']:
+        item = snapshots.get(ref['supplement_id'])
+        if not item or not item['valid']:
+            lines += [f'- {text(ref["supplement_id"])}：补证不存在或完整性待修复，本条主张待核对。']
+            continue
+        asset = next((a for a in item['assets'] if a['id'] == ref['asset_id']), None)
+        if not asset or not any(v['actor'] == followup['reviewer'] for v in asset['view_records']):
+            lines += [f'- {text(ref["supplement_id"])} / {text(ref["asset_id"])}：记录者查看依据待补。']
+            continue
+        lines += [f'- {text(item["id"])} · {link(asset["id"], asset["relative_path"])}；'
+                  f'来源 SHA-256：{text(item["source"]["sha256"])}；'
+                  f'导出代次：{text(item["source_export_generation"])}；'
+                  f'原帧：{readable(asset.get("source_frame"))}。',
+                  '  这是导入时的固定快照；不自动反映另一审阅目录后续变更。']
+    return lines + ['']
+
+
 def render_report(report, work, frames):
     """Only presentation changes here; machine data and completion gates stay in vor_store."""
     steps = sorted((r['payload'] for r in report.get('steps', [])),
                    key=lambda s: (s.get('start_frame', 0), s.get('end_frame', 0), s.get('id', '')))
     issues = [r['payload'] for r in report.get('issues', [])]
-    open_issues = [i for i in issues if i.get('status') != 'resolved']
+    open_issues = [i for i in issues if not issue_is_resolved(i)]
     assets = {a['id']: a for a in report.get('assets', [])}
     result = report['validation']
     findings_by_step = affected_steps(steps, report.get('coverage_audit') or {})
@@ -206,10 +266,15 @@ def render_report(report, work, frames):
         delivery = '当前范围的审阅记录已完成'
     else:
         delivery = '阶段性交付，审阅待完成'
-    lines = ['# 软件操作录屏审阅', '', f'**当前交付状态：{delivery}。**', '',
-             f"- 已确认步骤：{'、'.join(text(s['id']) for s in confirmed) or '无'}（按步骤记录）。",
+    lines = ['# 软件操作录屏审阅', '', f'**当前交付状态：{delivery}。**', '']
+    summary = report.get('delivery_summary')
+    if summary:
+        lines += [f'- {text(item)}' for item in summary] + ['']
+    else:
+        lines += ['- 复现验收：未记录。审阅完成度与实际照做成功分别验收。', '']
+    lines += [f"- 已确认步骤：{'、'.join(text(s['id']) for s in confirmed) or '无'}（按步骤记录）。",
              f"- 待核实步骤：{'、'.join(text(s['id']) for s in pending) or '无已登记项'}。",
-             f"- 未解决事项：{len(open_issues)} 项。", '- 复现验收：未记录。审阅完成度与实际照做成功分别验收。', '']
+             f"- 未解决事项：{len(open_issues)} 项。", '', '[继续审阅与交接](handoff.md)', '']
     if not steps:
         lines += ['尚无操作步骤；需继续查看画面并记录操作。', '']
     for issue in open_issues:
@@ -218,7 +283,16 @@ def render_report(report, work, frames):
     lines += ['', f"源视频：{link(Path(source).name, source, work) if source else '未记录'}。", '',
               '时间定位：原始 PTS 保留媒体时间戳；相对视频首帧时间按索引首帧换算。'
               '播放器实际起点未核实，起点一致时可按相对时间定位；未知时间不换算。', '',
-              '## 参数与生效范围', '',
+              '## 连续操作清单', '', '先按顺序阅读操作；每项链接可跳转到记录、疑点与完整画面证据。', '']
+    if not steps:
+        lines += ['尚无操作步骤。', '']
+    for number, step in enumerate(steps, 1):
+        overview_fields = zip(('入口', '对象', '输入', '确认', '结果'), action_fields(step))
+        lines += [f"{number}. [{text(step['id'])}](#{step_anchor(step)}) · {text(step.get('phase'))} · "
+                  f"{step_label(step, issues, findings_by_step[step['id']])}", '',
+                  f"   时间：{timestamp(step.get('start_frame'), frames)} → {timestamp(step.get('end_frame'), frames)}。", '',
+                  '   ' + '；'.join(f'**{label}**：{value}' for label, (_, value) in overview_fields), '']
+    lines += ['## 参数与生效范围', '',
               '每行保留对应步骤、对象与阶段；同名参数在后续步骤出现时另列，不跨步骤覆盖。', '',
               '| 步骤 / 阶段 | 对象 | 参数 | 记录值 | 生效范围 | 依据 |', '|---|---|---|---|---|---|']
     parameter_count = 0
@@ -240,10 +314,8 @@ def render_report(report, work, frames):
         lines += ['尚无操作步骤。', '']
     for step in steps:
         step_findings = findings_by_step[step['id']]
-        input_action = step.get('input_action')
-        input_text = (text(input_action) if isinstance(input_action, str) and input_action.strip() else
-                      '输入过程未单独记录；请结合确认动作与前后画面核对，阶段参数不代表输入动作。')
-        lines += [f"### {text(step['id'])} · {text(step.get('phase'))} · {step_label(step, issues, step_findings)}", '',
+        lines += [f'<a id="{step_anchor(step)}"></a>', '',
+                  f"### {text(step['id'])} · {text(step.get('phase'))} · {step_label(step, issues, step_findings)}", '',
                   f"起点：{timestamp(step.get('start_frame'), frames)}。", '',
                   f"终点：{timestamp(step.get('end_frame'), frames)}。", '',
                   f"软件 / 模块：{text(step.get('software'))} / {text(step.get('module'))}。", '']
@@ -255,12 +327,9 @@ def render_report(report, work, frames):
                 refs = refs or step.get('evidence', [])
                 lines.append(f"- {finding_reason(finding)}；该步骤证据：{references(refs, assets)}。")
             lines += ['']
-        lines += [f"1. **点击哪里**：{' → '.join(readable(v) for v in step.get('menu_path', [])) or '入口未记录'}。",
-                  f"2. **选择什么**：{readable(step.get('selected_objects', []))}。",
-                  f'3. **填写什么**：{input_text}']
+        lines += [f'{number}. **{label}**：{value}' for number, (label, value) in enumerate(action_fields(step), 1)]
         params = step.get('final_parameters') or {}
-        lines += [f"4. **如何确认**：{text(step.get('confirmation_action'))}",
-                  f"5. **应看到什么**：{text(step.get('visible_result'))}", '']
+        lines += ['']
         if params:
             lines += ['阶段参数记录：' + '；'.join(f'{text(k)} = {parameter_value(v)[0]}' for k, v in params.items()) + '。']
             if any('生效未核实' in parameter_scope(step, parameter_value(value)[1], issues, result['valid'],
@@ -271,7 +340,8 @@ def render_report(report, work, frames):
             lines += [f"- {label}：{'；'.join(file_text(v) for v in step.get(key, [])) or '无记录'}。"]
         if step.get('uncertainties'):
             lines += [f"- 待核实：{readable(step['uncertainties'])}。"]
-        lines += ['', '画面证据：', '']
+        lines += ['', f"画面证据：{references(step.get('evidence', []), assets)}。", '',
+                  '<details>', f"<summary>完整证据（{len(step.get('evidence', []))} 项，展开查看）</summary>", '']
         for ident in step.get('evidence', []):
             asset = assets.get(ident)
             if not asset:
@@ -280,14 +350,18 @@ def render_report(report, work, frames):
             role = evidence_roles(step, ident)
             lines += [f"{text(ident)} · {role} · {timestamp(asset['frame_no'], frames)}。", '',
                       '!' + link(ident, asset['path']), '']
+        lines += ['</details>', '']
     lines += ['## 待核对事项', '']
     if not open_issues:
         lines += ['无已登记的未解决事项。', '']
-    for group, entries in [(None, open_issues), ('### 已解决事项', [i for i in issues if i.get('status') == 'resolved'])]:
+    for group, entries in [(None, open_issues), ('### 已解决事项', [i for i in issues if issue_is_resolved(i)])]:
         if group and entries:
             lines += [group, '']
         for issue in entries:
             state = {'open': '待补查', 'blocked': '等待补充材料', 'resolved': '已解决'}.get(issue.get('status'), '状态未知')
+            legacy_closure_pending = issue.get('status') == 'resolved' and not issue_is_resolved(issue)
+            if legacy_closure_pending:
+                state = '已标记解决，结案依据待补'
             lines += [f"#### {text(issue.get('id'))} · {state}", '', text(issue.get('question')), '',
                       f"关联步骤：{'、'.join(text(i) for i in issue_steps(issue, steps)) or '未记录'}。", '']
             if issue.get('start_frame') is not None:
@@ -297,6 +371,9 @@ def render_report(report, work, frames):
                 lines += ['视频范围：未记录。', '']
             if issue.get('impact'):
                 lines += [f"影响：{readable(issue['impact'])}", '']
+            lines += followup_lines(issue, report)
+            if legacy_closure_pending:
+                lines += ['历史结案标记；当前缺少结构化结案依据，以下补查结论是历史原文。', '']
             lines += ['已尝试补查：', '']
             attempts = issue.get('attempts') or []
             if not attempts:
@@ -310,12 +387,16 @@ def render_report(report, work, frames):
                 for key, value in attempt.items():
                     shown = references(value, assets) if key == 'evidence' and isinstance(value, list) else readable(value)
                     lines += [f"- {labels.get(key, text(key))}：{shown}"]
-            if issue.get('status') != 'resolved':
-                lines += ['', f"下一步：{readable(issue.get('next_action')) if issue.get('next_action') else '未记录具体动作；需围绕本项问题补充证据。'}"]
+            if not issue_is_resolved(issue):
+                if legacy_closure_pending:
+                    lines += ['', '下一步：核对已有补查与证据，补齐记录者、理由和来源。']
+                    if issue.get('next_action'):
+                        lines += ['', f"原下一步（历史记录）：{readable(issue['next_action'])}"]
+                else:
+                    lines += ['', f"下一步：{readable(issue.get('next_action')) if issue.get('next_action') else '未记录具体动作；需围绕本项问题补充证据。'}"]
                 if issue.get('needed_information'):
                     lines += [f"所需信息：{readable(issue['needed_information'])}"]
-            elif issue.get('resolution'):
-                lines += ['', f"解决依据：{readable(issue['resolution'])}"]
+            lines += resolution_lines(issue, assets)
             if issue.get('evidence'):
                 lines += ['', f"相关证据：{references(issue['evidence'], assets)}"]
             lines += ['']

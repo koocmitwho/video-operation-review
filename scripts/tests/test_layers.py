@@ -246,6 +246,9 @@ class LayerContract(unittest.TestCase):
                 self.assertEqual(stats['fine_examined_frames_recorded'], 32)
                 self.assertEqual(stats['fine_reviewed_frames_recorded'], 0)
         issue['status'] = 'resolved'
+        issue['resolution'] = dict(mode='evidence', reviewer='fixture-author',
+                                   reason='Synthetic closure supported by the final fixture asset.',
+                                   evidence=['f000000031'])
         self.import_data({'issues': [issue]})
         self.assertEqual(store.status(self.conn)['fine_reviewed_frames_recorded'], 32)
 

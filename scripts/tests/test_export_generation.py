@@ -8,7 +8,7 @@ from unittest.mock import patch
 from test_record_contract import RecordFixture, step
 import vor_store as store
 
-DELIVERY = ('review.json', 'omission-audit.json', 'frames.jsonl', 'report.md')
+DELIVERY = ('review.json', 'omission-audit.json', 'frames.jsonl', 'report.md', 'handoff.md')
 
 
 class ExportGenerationContract(RecordFixture, unittest.TestCase):
@@ -16,7 +16,7 @@ class ExportGenerationContract(RecordFixture, unittest.TestCase):
         return {name: (self.work / name).read_bytes() for name in (*DELIVERY, 'export-manifest.json')
                 if (self.work / name).exists()}
 
-    def test_successful_export_has_complete_manifest_matching_all_four_files(self):
+    def test_successful_export_has_complete_manifest_matching_delivery_and_handoff(self):
         result = store.export_records(self.conn, self.work)
         self.assertTrue((self.work / 'export-manifest.json').is_file())
         manifest = json.loads((self.work / 'export-manifest.json').read_text(encoding='utf-8'))

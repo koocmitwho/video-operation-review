@@ -17,7 +17,11 @@ description: >-
 
 阶段结束或暂停后，用现有 `status` 与 attempts 简短说明已完成内容、待核对内容和下一步；长命令尚未返回时说明仍处于哪一阶段，不编造实时百分比。暂停及交付时留下结果绝对路径和继续回执。恢复先检查已有库与活动写入者，前缀回放不算新增审阅。具体做法见 [进度、恢复与用户交付](references/delivery.md)。
 
+用 `import-records` 保存 `delivery_context` 的本轮问题、范围、下一步和实际使用的语言来源 ID；暂停或交付时导出同代的 `report.md` 与 `handoff.md`，不只把继续信息留在聊天里。未实际照做时不填写复现通过；已有授权范围内的真实照做结果才追加 `reproduction_checks`，绑定当前内容快照与文件哈希。字段与新旧兼容边界见 [records.md](references/records.md)。
+
 新工作默认 **layered**。旧 v1/v2 库增量迁移至 v3，保留严格模式与旧记录；对旧库运行 `plan` 启用分层建议。`select --mode coverage` 与 `audit --mode strict` 提供逐状态穷尽复核。
+
+已有候选或完成 `plan` 后，先读 `queue`。用户问题对应明确时间范围时同时传入原始 PTS 的 `--start` / `--end`，范围不明时不猜边界；按返回批次抽取并实际查看原图。`--batch-size` 只控制响应大小，登记本批后重调同一队列，不使用 offset。其余候选和未覆盖范围继续保留，局部答案不等于完整审阅。具体字段见 [records.md](references/records.md)。
 
 ## 宿主适配
 
@@ -40,9 +44,13 @@ description: >-
 
 开始记录前读 [layered-review.md](references/layered-review.md)；命令见 [examples.md](references/examples.md)，字段见 [records.md](references/records.md)。严格逐状态流程见 [omission-review.md](references/omission-review.md)。
 
+用户补交另一段录像时，先独立审阅并完整导出，再用 `supplement-import` 保存选定原图的固定来源快照。后续说明的作者实际打开本地补证图并用 `supplement-view` 登记后，才在原疑点中追加 `followup`，分别写明新材料支持的主张和原片仍缺的内容。保留原问题、状态、范围与已有补查；补证不填原片 coverage，也不进入 `resolution`。快照与迁移规则见 [records.md](references/records.md)，命令见 [examples.md](references/examples.md)。
+
 ## 语言与字幕
 
 运行 `tracks` 后，优先导入 SRT/VTT 或内嵌文本字幕。`subtitles` 通过 FFmpeg 解析并按原始 PTS 对齐，保留重叠、原文、语言和来源；`transcript` 接收带时间基准的转写 JSON。讲解提供操作线索，画面提供菜单、数值与结果证据。明确告知旁白是否已使用；有音轨但无可用转写时说明“旁白未转写”，不假称已听取。本技能不内置 ASR，外部转写及服务按用户授权安排。接口和扩展方案见 [language.md](references/language.md)。
+
+轨道检查结果持久保存；导入不等于使用。仅把实际采用的已导入来源 ID 写入 `delivery_context.used_language_source_ids`，未采用时用空数组。报告会区分音轨未查、无音轨、未转写、已导入未声明使用及声明使用；文本导入不表示听取音频。
 
 ## 查看粒度与统计
 
@@ -51,6 +59,7 @@ description: >-
 - `recorded_visual_unique_frames` 统计查看登记；交付时对照可访问的真实工具结果，附上核对范围。`review_complete` 汇总候选审阅和当前模式门禁，`valid` 表示源文件、证据与记录完整性。
 - 明确预算下按进度交付，列出后续区间。机器耗时、上下文用量和各审阅者用量按实际测量分别报告；没有实测数据时不写节省比例。
 - 自动生成的答案及生成器预设不是独立标准答案。没有独立人工标注时写明“内部一致性复核”，不据此计算语义准确率；其他代理的复核仍需说明来源与范围。保留疑点 ID、补查过程和当前材料边界。
+- 新 `resolved` 疑点必须附带记录者、理由及证据或误设撤销依据；旧记录缺结案依据时保留原文并按待补处理。报告清单与证据折叠仅改善阅读，不减少原图要求；照做验收过期或证据变化时如实展示，不复用旧通过结论。
 
 ## 维护
 

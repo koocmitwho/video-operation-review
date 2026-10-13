@@ -7,7 +7,7 @@ import re
 import subprocess
 import vor_media as media
 
-from vor_store import dump, get_meta, log_history, now, ranges, sha256
+from vor_store import dump, get_meta, set_meta, log_history, now, ranges, sha256
 from vor_media import bind_source, finite_float, helper_attempt, run_helper, version
 from vor_layers import canonical_hash
 from vor_input_policy import input_options
@@ -21,9 +21,12 @@ def tracks(conn,ffprobe='ffprobe'):
         if p.returncode: raise ValueError(p.stderr.decode('utf-8',errors='replace'))
         streams=json.loads(p.stdout)['streams']
         simplify=lambda s:{k:s.get(k) for k in ('index','codec_name','codec_type','start_time','duration','tags')}
-        return dict(audio=[simplify(s) for s in streams if s['codec_type']=='audio'],
+        result = dict(audio=[simplify(s) for s in streams if s['codec_type']=='audio'],
                     subtitles=[simplify(s) for s in streams if s['codec_type']=='subtitle'],asr_started=False,
                     policy='优先使用已有字幕，支持本地文本字幕与外部转写 JSON 对齐。')
+        with conn:
+            set_meta(conn, 'media_tracks', result)
+        return result
 
 
 def _number(value):

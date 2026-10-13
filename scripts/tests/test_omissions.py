@@ -213,7 +213,10 @@ class OmissionContract(unittest.TestCase):
         self.prepare()
         data = self.good_records()
         data['steps'][0]['transition']['confirmation'] = {'status': 'not_shown', 'evidence': [], 'note': 'Not visible'}
-        data['issues'] = [{'id': 'Q1', 'question': 'Was it applied?', 'status': 'resolved', 'attempts': []}]
+        data['issues'] = [{'id': 'Q1', 'question': 'Was it applied?', 'status': 'resolved', 'attempts': [],
+                          'resolution': {'mode': 'evidence', 'reviewer': 'fixture',
+                                         'reason': 'Recorded claim; confirmation must still be checked separately.',
+                                         'evidence': ['f000000004']}}]
         self.import_data(data)
         audit = self.cli('audit')
         self.assertIn('confirmation_gap', self.codes(audit))

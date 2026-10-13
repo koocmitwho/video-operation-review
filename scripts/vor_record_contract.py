@@ -131,7 +131,56 @@ def check_issue(issue, path='issue'):
         errors.append(f'{path}.step_ids: must be an array of step IDs.')
     if 'step_id' in issue and issue['step_id'] is not None and not _text(issue['step_id']):
         errors.append(f'{path}.step_id: must be a nonempty string or null.')
+    if 'followup' in issue:
+        followup = issue['followup']
+        if not isinstance(followup, dict):
+            errors.append(f'{path}.followup: must be an object.')
+        else:
+            for key in ('claim', 'original_record_limit', 'reviewer'):
+                if not _text(followup.get(key)):
+                    errors.append(f'{path}.followup.{key}: must be a nonempty string.')
+            refs = followup.get('supplement_refs')
+            if (not isinstance(refs, list) or not refs
+                    or any(not isinstance(ref, dict) or not all(_text(ref.get(k)) for k in
+                               ('supplement_id', 'asset_id')) for ref in refs)):
+                errors.append(f'{path}.followup.supplement_refs: explicit nonempty supplement/asset pairs required.')
     return errors
+
+
+def resolution_errors(issue, path='issue'):
+    """Describe missing closure provenance without judging referenced evidence.
+
+    Legacy resolved records stay readable through check_issue. Only new imports
+    require this contract; consumers can use these diagnostics to keep legacy
+    closures pending until their justification is recorded.
+    """
+    if not isinstance(issue, dict):
+        return [f'{path}: must be an issue object.']
+    if issue.get('status') != 'resolved':
+        return []
+    resolution = issue.get('resolution')
+    field = f'{path}.resolution'
+    if not isinstance(resolution, dict):
+        return [f'{field}: must be an object with mode, reviewer and reason.']
+    errors = []
+    mode = resolution.get('mode')
+    if mode not in ('evidence', 'withdrawn'):
+        errors.append(f'{field}.mode: must be evidence or withdrawn.')
+    for key in ('reviewer', 'reason'):
+        if not _text(resolution.get(key)):
+            errors.append(f'{field}.{key}: must be a nonempty string.')
+    if mode == 'evidence':
+        refs = resolution.get('evidence')
+        if not _strings(refs) or not refs:
+            errors.append(f'{field}.evidence: must be a nonempty array of asset IDs.')
+    elif mode == 'withdrawn' and not _text(resolution.get('basis')):
+        errors.append(f'{field}.basis: must identify the original record supporting withdrawal.')
+    return errors
+
+
+def issue_is_resolved(issue):
+    """Require recorded closure provenance; integrity and semantics are audited separately."""
+    return isinstance(issue, dict) and issue.get('status') == 'resolved' and not resolution_errors(issue)
 
 
 def check_import_records(data):
@@ -142,6 +191,8 @@ def check_import_records(data):
         for index, entry in enumerate(data.get(table, [])):
             path = f'{table}[{index}]'
             errors = check(entry, path)
+            if table == 'issues':
+                errors.extend(resolution_errors(entry, path))
             if errors:
                 raise ValueError('; '.join(errors))
             if entry['id'] in seen:

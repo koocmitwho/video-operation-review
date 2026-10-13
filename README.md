@@ -2,7 +2,9 @@
 
 简体中文 | [English](README.en.md)
 
-固定版本预发布候选：**0.1.0-rc.5**。版本号见 [VERSION](VERSION)，本次步骤纠错与验收范围见 [RC.5 说明](references/release-rc5.md)；历史候选见 [RC.4 说明](references/release-rc4.md)、[RC.3 说明](references/release-rc3.md)、[RC.2 说明](references/release-rc2.md) 和 [RC.1 说明](references/release-candidate.md)。
+固定版本预发布候选：**0.1.0-rc.6**。版本号见 [VERSION](VERSION)，本次交付、补充资料与机器处理优化见 [RC.6 说明](references/release-rc6.md)；历史候选见 [RC.5 说明](references/release-rc5.md)、[RC.4 说明](references/release-rc4.md)、[RC.3 说明](references/release-rc3.md)、[RC.2 说明](references/release-rc2.md) 和 [RC.1 说明](references/release-candidate.md)。
+
+本版本的发行资产与对应提交见 [RC.6 发行页](https://github.com/koocmitwho/video-operation-review/releases/tag/v0.1.0-rc.6)；CI、发行包下载和安装分别核验。采用新交付记录、补证快照或 `followup` 的工作库须由 RC.6 或更新的兼容实现维护；RC.5 及更早版本不理解这些元数据与五文件交付，不能继续写入、验证或重导出。见 [变更记录](CHANGELOG.md)。
 
 **面向软件操作录屏的分层审阅技能：还原操作步骤，保留画面。**
 
@@ -12,7 +14,7 @@
 
 > 脚本负责视频索引、证据管理和记录检查；操作语义由 AI 助手实际查看图片后判断。
 
-RC.5 增加[带历史的同库步骤纠错](references/records.md)及[新来源 Python 操作案例](examples/open-cases/python-exception-20261007/README.md)。三组代理配对均避免重建，总耗时没有稳定下降；未建立真人可靠性或总体省时。分组算法与审阅完成条件保持原样，已有退休历史的库须使用 RC.5 或更新版本继续维护。
+RC.6 将操作清单、结案依据和续审回执整理到交付中，并支持独立补交录像关联原疑点、按问题时间范围优先查看候选。全帧计算与候选要求保留；两组同素材测量的机器扫描耗时下降约 35%–36%，实际视觉审阅未参与该计时，详见 [本轮测量摘要](validation/completion-20261013.json)。
 
 ## 主要作用
 
@@ -23,6 +25,8 @@ RC.5 增加[带历史的同库步骤纠错](references/records.md)及[新来源 
 - **接收字幕和已有转写。** 支持 SRT、VTT、内嵌文本字幕及带明确时间基准的转写 JSON；保留原文、可选译文、来源、偏移和重叠提示。
 - **保留审阅进度。** 使用 SQLite 保存索引、证据、查看记录、步骤和疑点；支持暂停后继续，并复用已有结果。
 - **同库更正误设步骤。** 带理由退休或替代步骤，保留原记录和关联历史；非法纠错整批回滚，旧复核结论失效，未解决疑点和异常展开继续保留。
+- **按问题优先看图。** 每次返回一批待查看原图，问题时间范围优先；实际登记后继续取下一批，其余候选持续保留。
+- **关联后来补交的材料。** 保留另一段录像独立的来源、帧与查看记录，以固定快照支持原疑点的后续说明，原片缺少的过程仍明确保留。
 
 ## 环境要求
 
@@ -108,6 +112,10 @@ python scripts/review_video.py doctor
 
 最终说明先列可复现步骤、按对象与阶段整理的最终参数、关键截图和关联时间的疑点，再附覆盖统计与记录。参见 [完整交付示例](examples/tutorial/report.md) 和 [进度、恢复与交付指引](references/delivery.md)。
 
+当前报告把操作清单放在前面，完整证据可展开查看；截图链接与审计记录保留，折叠展示不减少实际看图要求。代理把本轮问题、范围和下一步保存为 `delivery_context`，重新导出后仍可从 `handoff.md` 继续。已有真实照做结果时，可追加带环境、记录者、内容快照与文件哈希的 `reproduction_checks`；报告区分当前、过期和证据变化的验收，登记结果不改变审阅门禁，也不自动成为真人验收。字段与调用见 [记录契约](references/records.md) 和 [命令示例](references/examples.md)。
+
+照做产物使用 `replay/` 等独立位置的实际日志或结果，不能拿原视频、已登记截图、数据库或导出报告代替。手写或手改的 `handoff.md` 会阻止覆盖；先另名保留原笔记，再将意图写入 `delivery_context`。
+
 ### 使用命令行准备证据
 
 以下是供代理调用及调试的命令参考。从仓库根目录运行，将输入文件替换为本轮视频；从其他工作目录调用时使用脚本绝对路径。`--work` 应为这个视频专用的审阅目录。
@@ -116,15 +124,25 @@ python scripts/review_video.py doctor
 python scripts/review_video.py --help
 python scripts/review_video.py scan ./input/tutorial.mp4 --work ./work/tutorial
 python scripts/review_video.py plan --work ./work/tutorial
-python scripts/review_video.py candidates --work ./work/tutorial
-python scripts/review_video.py extract --candidates --work ./work/tutorial
+python scripts/review_video.py queue --work ./work/tutorial --batch-size 8
 ```
 
-这些命令完成索引、分段建议与图片导出。随后由宿主实际打开图片，再登记查看、填写操作记录并导入。完整操作示例和字段说明见：
+这些命令完成索引、分段建议并返回待看原图。按返回的 `frame_no` 用 `extract --frames` 抽取本批；宿主实际打开图片后，再登记查看、填写操作记录并导入。用户关注具体原始时间时，给 `queue` 同时加 `--start` / `--end`；范围改变优先顺序，`--batch-size` 只控制本次返回数量。范围按原请求帧时间匹配，即使精确重复段代表图在范围外也不会漏掉。登记后重调同一队列，无需 offset。完整操作示例和字段说明见：
 
 - [命令示例](references/examples.md)
 - [分层审阅与抽查](references/layered-review.md)
 - [步骤、证据与统计字段](references/records.md)
+
+### 补交另一段录像
+
+先在独立审阅目录处理补交录像，实际查看需要引用的原图，再生成完整五文件导出。将其中的已核对图片导入原审阅目录：
+
+```text
+python scripts/review_video.py supplement-import --work ./work/tutorial --source-review ./work/followup --id SUP1 --assets f000000003 --actor main --note "补交的重新启动后画面"
+python scripts/review_video.py supplements --work ./work/tutorial
+```
+
+资产 ID 按实际导出选择。随后由后续说明的作者实际打开本地补证图，用 `supplement-view` 登记，再将带 `claim`、`original_record_limit`、`reviewer` 和明确 `supplement_refs` 的 `followup` 加入原疑点完整记录。来源查看不会自动算作本轮查看；补证不修改原疑点状态，也不填补原片覆盖。快照保留独立源 SHA-256、原帧、导出代次和图片身份；源目录后来变化不自动刷新，本地快照损坏会报完整性错误。完整流程见 [命令示例](references/examples.md)。
 
 ### 字幕与转写
 
@@ -138,7 +156,7 @@ python scripts/review_video.py transcript ./input/speech.json --work ./work/tuto
 
 本技能不做语音识别、OCR 推理和自动翻译：转写由外部 ASR 适配器产出后以 JSON 导入，没有现成字幕的音频不会被自动转写。接口与依赖见 [语言、音频与字幕](references/language.md)。
 
-代理会说明本次是否利用了旁白及所用来源；只有音轨而没有转写时，报告明确标注“旁白未转写”。
+`tracks` 的实际结果会保存。报告分别说明音轨未检查、无音轨、有音轨但旁白未转写、文本已导入但未声明使用，以及审阅者声明使用的具体来源。代理只把真实使用的已导入 ID 填入 `delivery_context.used_language_source_ids`；导入字幕或转写不表示实际听取音频。
 
 ### 校验与导出
 
@@ -152,6 +170,8 @@ python scripts/review_video.py export --work ./work/tutorial
 
 导入步骤和疑点时，ID 必须为非空字符串，在同一批的各自列表内唯一；分批使用相同 ID 更新仍受支持。已知字段的类型错误会在写入前拒绝，错误指出字段位置。旧库中的非法步骤或疑点会被诊断并阻止导出，保留原记录供修正。报告将可定位的审计冲突或证据缺口标到对应步骤和参数，保留原值及依据；它仍不能自动判断自由文字是否符合画面。详见 [记录契约](references/records.md)。
 
+新导入的 `resolved` 疑点必须提供结构化 `resolution`：记录者、理由，以及本库证据或撤销误设的原记录依据。旧 `resolved` 缺少这些依据时仍可读取，不因此成为结构坏记录，但显示“结案依据待补”并继续影响完成门禁；原状态和历史不会被自动改写。
+
 ## 输出内容
 
 | 文件 | 内容 |
@@ -161,11 +181,13 @@ python scripts/review_video.py export --work ./work/tutorial
 | `review.json` | 结构化步骤、区间、疑点、统计与审计信息 |
 | `frames.jsonl` | 逐帧索引和变化指标 |
 | `omission-audit.json` | 覆盖、衔接、抽查和复核检查结果 |
-| `report.md` | 便于阅读的操作说明、截图与未解决项 |
-| `export-manifest.json` | 本次导出的代次标识及上述四份交付文件的大小、SHA-256 |
+| `report.md` | 操作清单、可展开证据、未解决项、语言使用情况与照做验收状态 |
+| `handoff.md` | 本轮问题、范围、源身份、实际进度及可交给新聊天的继续回执 |
+| `export-manifest.json` | 本次导出的代次标识及上述五份交付文件的大小、SHA-256 |
 | `evidence/` | 按需导出的原图、裁剪和概览拼图 |
+| `supplements/` | 独立补交资料的固定来源快照、所选原图及哈希清单；随审阅目录一起保留 |
 
-读取新导出时，先确认没有 `export.pending.json`，再核对 `export-manifest.json` 的 `state=complete`、代次和四个文件摘要。若存在 pending，保留它及指向的 `.export-*` 暂存目录和 `previous` 备份，核对或恢复上一代后再处理；不要直接删除标记以强行继续，程序也不会自动恢复。文件组切换不具备跨文件的断电原子性。旧导出没有清单时按旧格式处理，无需删除；完整检查规则见 [记录契约](references/records.md)。
+读取新导出时，先确认没有 `export.pending.json`，再核对 `export-manifest.json` 的 `state=complete`、代次和五个文件摘要。若存在 pending，保留它及指向的 `.export-*` 暂存目录和 `previous` 备份，核对或恢复上一代后再处理；不要直接删除标记以强行继续，程序也不会自动恢复。文件组切换不具备跨文件的断电原子性。旧四文件清单或没有清单的导出按其原格式保留，不倒推已包含交接信息；完整检查规则见 [记录契约](references/records.md)。
 
 输入视频、审阅数据库和证据可能包含使用者自己的内容。它们应保存在各自工作目录。
 每个 `--work` 由一个记录者串行写入；多位审阅者各自产出记录后按 ID 导入。
@@ -184,6 +206,8 @@ python scripts/review_video.py export --work ./work/tutorial
 审计核对记录一致性与区间覆盖；查看登记是自报值，不构成独立核实。
 
 ## 验证情况
+
+2026-10-13 的机器阶段对照使用同一份 64.289 秒 Inkscape 公开录像。两组隔离配对的扫描耗时为 111.394 → 72.039 秒和 116.336 → 74.069 秒，分别下降 35.33% 和 36.33%；全部 1903 帧的 18 个字段、394 个建议段、573 个请求和候选逐项一致。第一次诊断配对有短暂计算重叠，保留但不纳入这两组验收。两边实际图片工具调用均为 0，不据此推断整体审阅省时、较少看图或语义准确率。环境、来源身份与逐表摘要见 [本轮测量摘要](validation/completion-20261013.json)。
 
 2026-10-02 的审阅完整性修复验收在隔离 Git 副本中完成：Windows / Python 3.12.10 与 3.10.11 各 181 项测试通过，无失败、无跳过，分别耗时 163.798 秒与 214.210 秒。此处记录版本号更新前的修复阶段结果，不代替 RC.3 发布候选重测或对应提交的远端 CI。八份旧账本的隔离副本仍均为 `valid=true`、`review_complete=false`；六个原疑点保留。公开合成短例实际查看 5 张图片后完成阶段导出，四文件清单哈希和代次一致；这不是独立人工语义准确率。脱敏范围与限制见 [修复验收摘要](validation/fixes-20261002.json)，发布兼容变化见 [RC.3 说明](references/release-rc3.md)。
 

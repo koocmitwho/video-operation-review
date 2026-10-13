@@ -2,6 +2,7 @@
 import json
 from vor_store import get_meta, log_history, rebuild_candidates, validate
 from vor_audit import EvidenceAudit, content_snapshot
+from vor_record_contract import issue_is_resolved
 from vor_layers import (canonical_hash, coarse_ok, complement, covered_targets, coverage_counts,
                         fine_problems, interval_mapping, payloads, sample_requirements, viewed_frames)
 
@@ -151,7 +152,7 @@ def _review(conn,audit,entries,requirements,snapshot):
             audit.finding('reviewer_fine_view_missing',f"复核者尚缺 {e['id']} 的操作角色精审证据。",role_targets,stage='review')
     audit.review_trace_links(r)
     for issue in r['issue_ids']:
-        if issue not in audit.issues or audit.issues[issue]['status']!='resolved':
+        if not issue_is_resolved(audit.issues.get(issue)):
             audit.finding('review_issue_unresolved','复核仍有缺失/未解决疑点 '+issue,stage='review')
     if r['conclusion']!='no_additional_omissions_found': audit.finding('review_not_complete','复核仍未完成。',stage='review')
     return dict(info,status='current_independent_review_recorded' if len(audit.findings)==before else 'needs_followup')

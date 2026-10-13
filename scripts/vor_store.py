@@ -7,7 +7,8 @@ import os
 from pathlib import Path
 import sqlite3
 from vor_record_contract import (STEP_FIELDS, check_import_records, check_issue, check_step,
-                                 evidence_references, record_contract_audit, record_contract_errors)
+                                 evidence_references, record_contract_audit, record_contract_errors,
+                                 issue_is_resolved)
 
 SCHEMA_VERSION = 3
 
@@ -243,7 +244,7 @@ def status(conn, _record_errors=None):
             issue = json.loads(row[0])
         except (ValueError, TypeError):
             continue  # The field diagnostic is retained in record_contract_errors.
-        if not check_issue(issue) and issue['status'] != 'resolved':
+        if not check_issue(issue) and not issue_is_resolved(issue):
             open_issues.append(issue)
     result = {
         'video_total_frames': total, 'container_declared_frames': declared,
@@ -297,6 +298,8 @@ def status(conn, _record_errors=None):
     result['review_mode'] = get_meta(conn, 'review_mode', 'layered')
     result['recorded_overview_unique_frames'] = conn.execute(
         'SELECT COUNT(DISTINCT frame_no) FROM views WHERE presentation="overview"').fetchone()[0]
+    from vor_delivery import content_snapshot
+    result['delivery_snapshot'] = content_snapshot(conn)
     return result
 
 
@@ -455,6 +458,14 @@ def import_records(conn, path):
         if key in data and not isinstance(data[key], list):
             raise ValueError(f'{key} must be an array.')
     check_import_records(data)
+    from vor_supplements import supplement_reference_errors
+    work = Path(conn.execute('PRAGMA database_list').fetchone()[2]).parent
+    for issue in data.get('issues', []):
+        if issue.get('followup'):
+            followup = issue['followup']
+            errors = supplement_reference_errors(conn, work, followup['supplement_refs'], followup['reviewer'])
+            if errors:
+                raise ValueError('followup supplement references: ' + '; '.join(e['message'] for e in errors))
     check_aux_records(conn, data)
     check_layer_records(conn, data)
     retirements = prepare_step_retirements(conn, data)
@@ -475,6 +486,9 @@ def import_records(conn, path):
             conn.execute('DELETE FROM steps WHERE id=?', (entry['id'],))
             log_history(conn, 'retired_step', entry)
         import_layer_records(conn, data)
+        from vor_delivery import import_delivery
+        work = Path(conn.execute('PRAGMA database_list').fetchone()[2]).parent
+        import_delivery(conn, data, work)
         log_history(conn, 'import_records', data)
     return status(conn)
 
@@ -554,7 +568,7 @@ def prepare_step_retirements(conn, data):
                 references['issues'].append(issue)
         for issue in references['issues']:
             current = after['issues'][issue['id']]
-            if issue['status'] != 'resolved':
+            if not issue_is_resolved(issue):
                 stable = lambda record: {k: v for k, v in record.items() if k not in ('step_id', 'step_ids')}
                 if (stable(issue) != stable(current) or not replacements
                         or not (explicit_links(issue) - ids) <= explicit_links(current)
@@ -651,6 +665,10 @@ def validate(conn, work, require_coverage=False, mode=None, force_source_hash=Fa
             continue
         if check_issue(issue):
             continue
+        if issue.get('followup'):
+            from vor_supplements import supplement_reference_errors
+            followup = issue['followup']
+            errors.extend(supplement_reference_errors(conn, work, followup['supplement_refs'], followup['reviewer']))
         try:
             references = evidence_references(issue)
         except ValueError as exc:
@@ -665,15 +683,30 @@ def validate(conn, work, require_coverage=False, mode=None, force_source_hash=Fa
     # provenance too, even after their active versions have been corrected.
     for row in conn.execute('SELECT * FROM step_retirements'):
         try:
-            references = evidence_references(json.loads(row['payload']))
+            retired_payload = json.loads(row['payload'])
+            references = evidence_references(retired_payload)
         except (ValueError, TypeError):
             continue  # Contract diagnostics already retain malformed archives.
+        from vor_supplements import supplement_reference_errors
+        for field in ('references_before', 'references_after'):
+            archive_refs = retired_payload.get(field)
+            if not isinstance(archive_refs, dict) or not isinstance(archive_refs.get('issues'), list):
+                continue
+            for index, issue in enumerate(archive_refs['issues']):
+                if check_issue(issue) or not issue.get('followup'):
+                    continue
+                followup = issue['followup']
+                for diagnostic in supplement_reference_errors(conn, work, followup['supplement_refs'], followup['reviewer']):
+                    errors.append(dict(diagnostic, reference=f'{row["id"]}.{field}.issues[{index}].{diagnostic["reference"]}'))
         for ident in references:
             if ident not in assets:
                 err('unknown_evidence', row['id'], ident)
             elif ident not in seen_assets:
                 err('unreviewed_evidence', row['id'], ident)
     s = status(conn, _record_errors=contract_errors)
+    from vor_supplements import supplement_status
+    for supplementary in supplement_status(conn, work):
+        errors.extend(supplementary['errors'])
     if not s['full_compute_complete']:
         warnings.append('全帧计算待完成；请查看 attempts 和后续范围。')
     if s['container_frame_count_mismatch']:
@@ -730,6 +763,10 @@ def export_records(conn, work, force_source_hash=False):
                     row[key] = json.loads(row[key])
     from functools import lru_cache
     from vor_report import render_report
+    from vor_delivery import attach_delivery, render_handoff
+    from vor_supplements import supplement_status
+    report['supplements'] = supplement_status(conn, work)
+    attach_delivery(conn, report, work)
     @lru_cache(maxsize=4096)
     def frame_details(frame_no):
         row = conn.execute('SELECT frame_no,pts_time,best_effort_time,time_s,time_source '
@@ -740,6 +777,7 @@ def export_records(conn, work, force_source_hash=False):
         markdown = render_report(report, work, frame_details)
         markdown += f'\n<!-- export_generation: {generation}; verify export-manifest.json and absence of export.pending.json -->\n'
         (stage / 'report.md').write_text(markdown, encoding='utf-8')
+        (stage / 'handoff.md').write_text(render_handoff(report, work), encoding='utf-8')
         (stage / 'review.json').write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False), encoding='utf-8')
         audit_file = dict(report['coverage_audit'], export_generation=generation)
         (stage / 'omission-audit.json').write_text(json.dumps(audit_file, ensure_ascii=False, indent=2, allow_nan=False), encoding='utf-8')
@@ -752,7 +790,8 @@ def export_records(conn, work, force_source_hash=False):
     publication = publish_generation(work, generation, populate)
     audit = report['coverage_audit']
     return {'review_json': str(work / 'review.json'), 'frames_jsonl': str(work / 'frames.jsonl'),
-            'report': str(work / 'report.md'), 'omission_audit': str(work / 'omission-audit.json'),
+            'report': str(work / 'report.md'), 'handoff': str(work / 'handoff.md'),
+            'omission_audit': str(work / 'omission-audit.json'),
             'validation_passed': report['validation']['valid'],
             'review_complete': report['validation']['review_complete'],
             'omission_gate_passed_recorded': audit['review_gate_passed_recorded'], **publication}

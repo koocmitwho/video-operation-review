@@ -142,6 +142,7 @@ class ReadableReportContract(unittest.TestCase):
                                 evidence=['f000000003'], new_information='按钮被遮挡', conclusion='仍待核实')],
                  next_action='补看未遮挡的确认画面', impact='尚不能将新值作为后续计算输入'),
             dict(id='Q2', question='输入文件名？', status='resolved', start_frame=0, end_frame=1,
+                 resolution=dict(mode='evidence', reviewer='test-author', reason='标题栏可读', evidence=['f000000000']),
                  attempts=[dict(action='放大标题栏', new_information='已读到 input.csv', conclusion='已解决')])])
         _, md = self.export()
         front = md.split('## 参数与生效范围')[0]

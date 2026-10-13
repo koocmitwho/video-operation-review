@@ -2,7 +2,9 @@
 
 [简体中文](README.md) | English
 
-Fixed prerelease candidate: **0.1.0-rc.5**. See [VERSION](VERSION) and the [RC.5 notes](references/release-rc5.md) for step correction and validation scope; earlier candidates are documented in the [RC.4 notes](references/release-rc4.md), [RC.3 notes](references/release-rc3.md), [RC.2 notes](references/release-rc2.md), and [RC.1 notes](references/release-candidate.md).
+Fixed prerelease candidate: **0.1.0-rc.6**. See [VERSION](VERSION) and the [RC.6 notes](references/release-rc6.md) for delivery, supplementary evidence and machine-processing changes; earlier candidates are documented in the [RC.5 notes](references/release-rc5.md), [RC.4 notes](references/release-rc4.md), [RC.3 notes](references/release-rc3.md), [RC.2 notes](references/release-rc2.md), and [RC.1 notes](references/release-candidate.md).
+
+See the [RC.6 release page](https://github.com/koocmitwho/video-operation-review/releases/tag/v0.1.0-rc.6) for distribution assets and their commit. CI, downloaded assets and installation are verified separately. Ledgers using the new delivery records, supplementary snapshots or `followup` require RC.6 or a later compatible implementation. RC.5 and earlier do not understand these records or the five-file delivery and must not write, validate or re-export such ledgers. See the [changelog](CHANGELOG.md).
 
 **A layered review skill for software screen recordings: reconstruct operations and preserve video frames.**
 
@@ -12,7 +14,7 @@ For example, if a video shows someone entering `0.20`, cancelling, then entering
 
 > The scripts handle video indexing, evidence management, and record checks. The AI assistant interprets the operations by actually viewing the images.
 
-RC.5 adds [same-ledger step correction with history](references/records.md) and a [new-source Python operation case](examples/open-cases/python-exception-20261007/README.md). Three agent pairs avoided rebuilding, but total elapsed time did not improve consistently; human reliability and overall time savings remain unestablished. Grouping and completion criteria are unchanged. Ledgers containing retirement history must be maintained with RC.5 or a later compatible version.
+RC.6 brings the operation checklist, closure provenance and continuation note into the delivery. It also links independent supplementary recordings to original questions and prioritizes candidate images by the question's time range. Full-frame computation and candidate requirements remain. Two paired measurements on one recording reduced machine-scan time by approximately 35%–36%; visual review was outside that timing. See the [measurement summary](validation/completion-20261013.json).
 
 ## Features
 
@@ -23,6 +25,8 @@ RC.5 adds [same-ledger step correction with history](references/records.md) and 
 - **Subtitles and existing transcripts.** Accept SRT, VTT, embedded text subtitles, and transcript JSON with an explicit time base. Preserve the original text, optional translations, sources, offsets, and overlap warnings.
 - **Persistent review progress.** Store indexes, evidence, viewing records, steps, and open questions in SQLite. Resume after a pause and reuse existing results.
 - **Same-ledger step correction.** Retire or replace a mistaken step with a reason and preserved relationship history. Invalid corrections roll back atomically, old reviews become stale, and unresolved issues and required anomaly expansion remain visible.
+- **Question-prioritized viewing.** Return a batch of pending original images, with the relevant time range first. Register actual views and request the next batch; all other candidates remain pending.
+- **Supplementary recordings.** Preserve each recording's independent source, frames and viewing records. A fixed snapshot supports a followup to an original question while retaining the original video's missing information.
 
 ## Requirements
 
@@ -107,6 +111,10 @@ The agent first looks for an existing review directory. New work uses your chose
 
 The final explanation starts with reproducible steps, final parameters grouped by object and phase, key screenshots, and questions tied to their time positions; coverage statistics and records follow. See the [complete delivery example](examples/tutorial/report.md) and [progress, resumption, and delivery guidance](references/delivery.md) (both in Chinese).
 
+The current report places an operation checklist first and keeps the complete evidence in expandable sections. Image links and audit records remain available; folding evidence does not reduce actual viewing requirements. The agent persists the question, scope, and next action in `delivery_context`, so `handoff.md` remains a continuation entry point after re-export. Actual reproduction results can be appended as `reproduction_checks`, with an environment, recorder, content snapshot, and artifact hashes. The report distinguishes current results from stale content or changed evidence. Recording a result does not change the review gate or automatically establish human acceptance. See the [record contract](references/records.md) and [command examples](references/examples.md).
+
+Use actual reproduction logs or results stored separately, for example under `replay/`; the source video, registered screenshots, database, and exported reports are not reproduction artifacts. A handwritten or manually edited `handoff.md` blocks replacement. Preserve those notes under another name and import their intended continuation context into `delivery_context` before exporting again.
+
 ### Prepare evidence from the command line
 
 These commands are references for the agent and for debugging. Run them from the repository root with the current video, or use the script's absolute path from another directory. Use a dedicated review directory for that video with `--work`.
@@ -115,15 +123,25 @@ These commands are references for the agent and for debugging. Run them from the
 python scripts/review_video.py --help
 python scripts/review_video.py scan ./input/tutorial.mp4 --work ./work/tutorial
 python scripts/review_video.py plan --work ./work/tutorial
-python scripts/review_video.py candidates --work ./work/tutorial
-python scripts/review_video.py extract --candidates --work ./work/tutorial
+python scripts/review_video.py queue --work ./work/tutorial --batch-size 8
 ```
 
-These commands create the index, propose segments, and export images. The host then opens the images, records the views, fills in operation records, and imports them. For complete examples and field definitions, see:
+These commands create the index, propose segments and return pending original images. Pass the returned `frame_no` values to `extract --frames` for this batch; the host then actually opens the images, records the views, fills in operation records and imports them. When the user specifies an original-time range, pass both `--start` and `--end` to `queue`. The range changes priority, and `--batch-size` limits only the current response. Matching uses original requested-frame timestamps, so an exact-run representative outside the window is still included when it represents an in-window request. After registering views, request the same queue again without an offset. For complete examples and field definitions, see:
 
 - [Command examples](references/examples.md)
 - [Layered review and sampling](references/layered-review.md)
 - [Steps, evidence, and statistics](references/records.md)
+
+### Add a supplementary recording
+
+Process the supplementary recording in its own review directory, actually view the original images you intend to cite, and create a complete five-file export. Import the selected images into the original review directory:
+
+```text
+python scripts/review_video.py supplement-import --work ./work/tutorial --source-review ./work/followup --id SUP1 --assets f000000003 --actor main --note "Supplementary post-restart view"
+python scripts/review_video.py supplements --work ./work/tutorial
+```
+
+Choose asset IDs from the actual export. The followup author then opens the local archived image, registers that display with `supplement-view`, and adds a `followup` containing `claim`, `original_record_limit`, `reviewer` and explicit `supplement_refs` to the full original issue record. Imported source views do not count as the author's local views. Supplementary evidence does not change the original issue status or fill primary-video coverage. The snapshot retains the independent source SHA-256, original frames, export generation and image identities. Later source-directory changes do not refresh it; damage to the local snapshot produces integrity errors. See the [command examples](references/examples.md) for the complete workflow.
 
 ### Subtitles and transcripts
 
@@ -137,7 +155,7 @@ Subtitles are aligned to the original video timeline using “subtitle time + ex
 
 This skill does not perform speech recognition, OCR inference, or automatic translation: transcripts are produced by an external ASR adapter and imported as JSON, so audio without existing captions is not transcribed automatically. See [Language, audio, and subtitles](references/language.md) for interfaces and dependencies.
 
-The agent states whether narration was used and identifies its source. When an audio track exists without a transcript, the report explicitly says that narration has not been transcribed.
+Actual `tracks` results are persisted. The report distinguishes tracks not checked, no audio, audio without transcription, imported text with no declared use, and the specific sources the reviewer declares using. The agent puts only genuinely used, imported IDs in `delivery_context.used_language_source_ids`. Importing subtitles or transcripts does not mean the audio was listened to.
 
 ### Validate and export
 
@@ -151,6 +169,8 @@ python scripts/review_video.py export --work ./work/tutorial
 
 Imported step and issue IDs must be nonempty strings and unique within their respective list in one batch; later batches can still update the same ID. Invalid types in known fields are rejected before writing, with the field location in the error. Invalid steps or issues already in a database are diagnosed and block export, while the original records remain available for correction. Reports mark locatable audit conflicts or evidence gaps on the affected steps and parameters, retaining the original values and evidence; they still cannot automatically decide whether free text matches the video. See the [record contract](references/records.md).
 
+Newly imported `resolved` issues require a structured `resolution`: a recorder, a reason, and either evidence from this ledger or an original-record basis for withdrawing a mistaken question. Legacy resolved issues without that provenance remain readable and are not made structurally invalid solely for this omission. They appear as awaiting closure provenance and continue to affect the completion gate; original status and history are not silently rewritten.
+
 ## Output
 
 | File | Contents |
@@ -160,11 +180,13 @@ Imported step and issue IDs must be nonempty strings and unique within their res
 | `review.json` | Structured steps, intervals, open questions, statistics, and audit information |
 | `frames.jsonl` | Per-frame indexes and change metrics |
 | `omission-audit.json` | Results of coverage, continuity, sampling, and review checks |
-| `report.md` | Readable operation instructions, screenshots, and unresolved questions |
-| `export-manifest.json` | Export generation and the sizes and SHA-256 hashes of the four delivery files above |
+| `report.md` | Operation checklist, expandable evidence, unresolved questions, language usage, and reproduction status |
+| `handoff.md` | Current question, scope, source identity, actual progress, and a continuation note for another chat |
+| `export-manifest.json` | Export generation and the sizes and SHA-256 hashes of the five delivery files above |
 | `evidence/` | Original images, crops, and overview contact sheets exported as needed |
+| `supplements/` | Fixed source snapshots, selected original images and hash manifests for independent supplementary material; preserve with the review directory |
 
-Before consuming a new export, check that `export.pending.json` is absent, then verify the `state=complete`, generation, and four file hashes in `export-manifest.json`. If pending exists, preserve it, its referenced `.export-*` staging directory, and the `previous` backups for inspection or restoration of the preceding generation. Do not delete the marker merely to continue; recovery is not automatic. Replacing the file group is not an atomic transaction across power loss. Exports without a manifest remain legacy-format output and need not be deleted; see the [record contract](references/records.md) for the full checks.
+Before consuming a new export, check that `export.pending.json` is absent, then verify the `state=complete`, generation, and five file hashes in `export-manifest.json`. If pending exists, preserve it, its referenced `.export-*` staging directory, and the `previous` backups for inspection or restoration of the preceding generation. Do not delete the marker merely to continue; recovery is not automatic. Replacing the file group is not an atomic transaction across power loss. Preserve old four-file manifests and exports without manifests in their original format; do not infer that they contain the new handoff information. See the [record contract](references/records.md) for the full checks.
 
 Input videos, review databases, and evidence may contain the user's own content. Keep them in their respective working directories.
 Each `--work` is written serially by one recorder; multiple reviewers produce their own records and import them by ID.
@@ -183,6 +205,8 @@ Original images, crops, enlarged views, and contact-sheet panels from the same s
 An audit checks record consistency and interval coverage; viewing records are self-reported and are not independent verification.
 
 ## Validation
+
+The 2026-10-13 machine-stage comparison used the same 64.289-second public Inkscape recording. Two isolated pairs measured scan times of 111.394 → 72.039 seconds and 116.336 → 74.069 seconds, reductions of 35.33% and 36.33%. All 18 fields of 1,903 frame rows, 394 proposed segments, and 573 requests/candidates matched exactly. The first diagnostic pair briefly overlapped other computation; it is retained but excluded from these two acceptance pairs. Both sides made zero image-tool calls, so this does not establish overall review time savings, fewer image views or semantic accuracy. See the [measurement summary](validation/completion-20261013.json) for the environment, source identity and per-table digests.
 
 The 2026-10-02 review-integrity repair acceptance ran in an isolated Git copy on Windows: Python 3.12.10 and 3.10.11 each passed 181 tests with no failures or skips, taking 163.798 and 214.210 seconds respectively. These are repair-stage results recorded before the version update, not a replacement for RC.3 candidate retesting or commit-specific remote CI. All eight isolated legacy ledgers remain `valid=true`, `review_complete=false`, and the six original evidence gaps remain unresolved. The public synthetic sample reached staged export after five actual image views; the four-file manifest hashes and generation matched. This is not an independent human measure of semantic accuracy. See the [sanitized repair acceptance summary](validation/fixes-20261002.json) for scope and limitations and the [RC.3 notes](references/release-rc3.md) for compatibility changes.
 

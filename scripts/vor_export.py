@@ -6,7 +6,7 @@ import shutil
 import tempfile
 
 
-DELIVERY_FILES = ('review.json', 'omission-audit.json', 'frames.jsonl', 'report.md')
+DELIVERY_FILES = ('review.json', 'omission-audit.json', 'frames.jsonl', 'report.md', 'handoff.md')
 MANIFEST = 'export-manifest.json'
 PENDING = 'export.pending.json'
 
@@ -29,12 +29,24 @@ def require_no_pending_export(work):
     if (Path(work) / PENDING).exists():
         raise ValueError(f'{PENDING} exists: export is incomplete. Preserve the staging/previous files; '
                          'restore or inspect that generation before exporting again.')
+    # This new fixed filename may already contain user-authored continuation notes.
+    handoff = Path(work) / 'handoff.md'
+    if handoff.exists() or handoff.is_symlink():
+        try:
+            previous = json.loads((Path(work) / MANIFEST).read_text(encoding='utf-8'))
+            expected = previous['files']['handoff.md']['sha256']
+            managed = not handoff.is_symlink() and handoff.is_file() and _hash(handoff) == expected
+        except (OSError, ValueError, TypeError, KeyError):
+            managed = False
+        if not managed:
+            raise ValueError('handoff.md contains untracked or edited notes. Preserve it under another name '
+                             'and import the intended delivery_context before exporting; nothing was overwritten.')
 
 
 def publish_generation(work, generation, populate):
     """Render everything before publishing; a pending receipt fences interrupted groups.
 
-    The four legacy filenames remain available. Their replacements are not a filesystem
+    The legacy files and continuation receipt remain available. Their replacements are not a filesystem
     transaction: consumers must reject a pending receipt and verify the final manifest.
     Ordinary exceptions roll back; crash/power-loss recovery remains explicit.
     """

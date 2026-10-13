@@ -34,4 +34,6 @@ check_release.py 按字节计算哈希，因此行尾调整会显示 changed。�
 
 本地运行和远端 CI 分别留存，日期明确的历史结果持续保留。发布和提交按维护者的当前授权执行。
 
-固定版本从 [VERSION](../VERSION) 读取；`python scripts/review_video.py --version` 可在无第三方依赖时检查候选身份。当前候选的范围见 [RC.5 说明](release-rc5.md)，此前材料见 [RC.4 说明](release-rc4.md)，此前运行逻辑的兼容边界见 [RC.3 说明](release-rc3.md)，首个候选的历史交付见 [候选说明](release-candidate.md)。
+固定版本从 [VERSION](../VERSION) 读取；`python scripts/review_video.py --version` 可在无第三方依赖时检查候选身份。当前候选的范围见 [RC.6 说明](release-rc6.md)，此前材料见 [RC.5 说明](release-rc5.md)、[RC.4 说明](release-rc4.md)，此前运行逻辑的兼容边界见 [RC.3 说明](release-rc3.md)，首个候选的历史交付见 [候选说明](release-candidate.md)。
+
+RC.6 的新交付与补证记录要求兼容工具维护，不能用 RC.5 及更早版本重导出新库。补证快照保存在各自审阅目录中，不随技能发行包分发；从审核后的 Git 文件清单打包，保留既有标签及本地历史回执。机器扫描配对、实际图片查看、用户照做、发布专用回归、对应提交 CI 和下载验收分别记录，候选说明不预先填写尚未完成的结果。

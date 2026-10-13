@@ -4,6 +4,7 @@ import json
 import re
 
 from vor_store import dump, evidence_references, get_meta, log_history, rebuild_candidates, validate
+from vor_record_contract import issue_is_resolved
 
 
 def _nonempty(value):
@@ -83,6 +84,9 @@ def content_snapshot(conn):
         # Empty retirement history preserves old snapshot bytes. Once corrected,
         # returning to an earlier active step set cannot revive its old review.
         add({'step_retirements': retired})
+    supplements = get_meta(conn, 'supplements', [])
+    if supplements:
+        add({'supplements': supplements})
     # New crops or redundant images do not change the authored content. Only cited assets are pinned.
     refs = set()
     for table in ['steps', 'issues', 'coverage']:
@@ -349,7 +353,7 @@ class EvidenceAudit:
                              self.state_context(n), 'review', frame_no=n)
         for ident in review['issue_ids']:
             issue = self.issues.get(ident)
-            if issue is None or issue['status'] != 'resolved':
+            if not issue_is_resolved(issue):
                 self.finding('review_issue_unresolved', f'遗漏复核中的疑点 {ident} 尚未解决或不存在。', stage='review')
         if review['conclusion'] != 'no_additional_omissions_found':
             self.finding('review_not_complete', '遗漏复核尚未得到“未发现新增遗漏”的有界结论。', stage='review')

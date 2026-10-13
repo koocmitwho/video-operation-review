@@ -308,7 +308,12 @@ def metrics(previous, current, tile_size, pixel_threshold):
     if previous is None or previous.shape != current.shape:
         return None, None, None, None, []
     # Full-resolution, all RGB channels. No resizing before exact comparison/diff.
-    delta = np.abs(current.astype(np.int16) - previous.astype(np.int16)).max(axis=2)
+    # Reduce one channel at a time: identical signed differences, fewer large
+    # temporaries, and no strided three-channel max reduction at each pixel.
+    delta = np.abs(current[:, :, 0].astype(np.int16) - previous[:, :, 0].astype(np.int16))
+    for channel in (1, 2):
+        np.maximum(delta, np.abs(current[:, :, channel].astype(np.int16)
+                                 - previous[:, :, channel].astype(np.int16)), out=delta)
     changed = int(np.count_nonzero(delta >= pixel_threshold))
     height, width = delta.shape
     ys, xs = np.arange(0, height, tile_size), np.arange(0, width, tile_size)
