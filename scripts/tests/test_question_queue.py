@@ -15,7 +15,7 @@ class QuestionQueueContract(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix='vor queue 中文 ')
         self.addCleanup(temporary.cleanup)
-        self.work = Path(temporary.name)
+        self.work = Path(temporary.name).resolve()
         self.conn = store.connect(self.work, create=True)
         self.addCleanup(self.conn.close)
         self.source = {'path': str(self.work / 'source.mkv'), 'size': 123, 'sha256': 'a' * 64}
